@@ -14,6 +14,7 @@ export type NavigationCallbacks = {
     displayName: string,
     avatar: string
   ) => Promise<void>
+  refreshUnreadBadge: () => void
 }
 
 let navigationCallbacks: NavigationCallbacks | null = null
@@ -29,8 +30,8 @@ export function getNavigationCallbacks(): NavigationCallbacks | null {
 // Global state
 export let chatDrawer: HTMLElement | null = null
 export let chatOverlay: HTMLElement | null = null
-export let currentConversationId: number | null = null
-export let currentUserId: number | null = null
+export let currentConversationId: string | null = null
+export let currentUserId: string | null = null
 export let wsCleanup: (() => void) | null = null
 export let pendingMessageId = 0
 export let typingTimeout: ReturnType<typeof setTimeout> | null = null
@@ -39,7 +40,7 @@ export let currentOtherUser: CurrentOtherUser | null = null
 
 // Message cache for instant loading
 export const messageCache: Map<
-  number,
+  string,
   { messages: ApiMessage[]; timestamp: number }
 > = new Map()
 export const CACHE_TTL = 30000 // 30 seconds
@@ -58,11 +59,11 @@ export function setChatOverlay(el: HTMLElement | null) {
   chatOverlay = el
 }
 
-export function setCurrentConversationId(id: number | null) {
+export function setCurrentConversationId(id: string | null) {
   currentConversationId = id
 }
 
-export function setCurrentUserId(id: number | null) {
+export function setCurrentUserId(id: string | null) {
   currentUserId = id
 }
 

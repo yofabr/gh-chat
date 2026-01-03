@@ -5,9 +5,11 @@ import {
   getMessages,
   getOrCreateConversation,
   joinConversation,
+  markConversationAsRead,
   markMessagesAsRead,
   sendStopTyping,
   sendTypingIndicator,
+  setGlobalMessageListener,
   type Message as ApiMessage
 } from "~lib/api"
 
@@ -19,6 +21,7 @@ import {
   getNavigationCallbacks,
   incrementPendingMessageId,
   messageCache,
+  setChatListCache,
   setCurrentConversationId,
   setCurrentOtherUser,
   setCurrentUserId,
@@ -35,7 +38,7 @@ export async function renderConversationViewAnimated(
   username: string,
   displayName: string,
   avatar: string,
-  existingConversationId?: number
+  existingConversationId?: string
 ): Promise<void> {
   if (!chatDrawer) return
 
@@ -73,10 +76,13 @@ export async function renderConversationViewInto(
   username: string,
   displayName: string,
   avatar: string,
-  existingConversationId?: number
+  existingConversationId?: string
 ): Promise<void> {
   setCurrentView("conversation")
   setCurrentOtherUser({ username, displayName, avatar })
+
+  // Stop listening for global messages (list view listener)
+  setGlobalMessageListener(null)
 
   // Check if we have cached messages for instant display
   const cached = existingConversationId
@@ -205,7 +211,7 @@ export async function renderConversationViewInto(
   }
 
   // Track unread message IDs (received messages that haven't been read)
-  const unreadMessageIds: number[] = []
+  const unreadMessageIds: string[] = []
 
   // Only fetch and render messages if we didn't show cached ones instantly
   if (!canUseInstantly) {
@@ -439,15 +445,15 @@ export async function renderConversationViewInto(
         markMessagesAsRead([newMessage.id])
       },
 
-      onTyping: (_typingUserId: number, typingUsername: string) => {
+      onTyping: (_typingUserId: string, typingUsername: string) => {
         showTypingIndicator(typingUsername)
       },
 
-      onStopTyping: (_typingUserId: number) => {
+      onStopTyping: (_typingUserId: string) => {
         hideTypingIndicator()
       },
 
-      onMessagesRead: (readMessageIds: number[]) => {
+      onMessagesRead: (readMessageIds: string[]) => {
         readMessageIds.forEach((id) => {
           const msgEl = container?.querySelector(`[data-message-id="${id}"]`)
           if (msgEl && msgEl.classList.contains("sent")) {
@@ -462,6 +468,15 @@ export async function renderConversationViewInto(
     })
 
     setWsCleanup(cleanup)
+
+    // Mark the conversation as read (updates the server's last_read_at timestamp)
+    markConversationAsRead(conversation.id).then(() => {
+      // Invalidate the chat list cache so back navigation shows fresh unread counts
+      setChatListCache(null)
+      // Refresh the unread badge in the header after marking as read
+      const nav = getNavigationCallbacks()
+      nav?.refreshUnreadBadge()
+    })
 
     // Now that we're joined, mark any unread messages as read
     if (unreadMessageIds.length > 0) {

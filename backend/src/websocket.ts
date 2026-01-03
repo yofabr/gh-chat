@@ -14,16 +14,16 @@ import {
 } from "./redis.js";
 
 interface AuthenticatedSocket extends WebSocket {
-  userId?: number;
+  userId?: string;
   username?: string;
-  conversationId?: number;
+  conversationId?: string;
   isAlive?: boolean;
   cleanupFns?: (() => void)[];
 }
 
 // Local socket tracking (for this server instance only)
-const localConversationSockets = new Map<number, Set<AuthenticatedSocket>>();
-const localUserSockets = new Map<number, Set<AuthenticatedSocket>>();
+const localConversationSockets = new Map<string, Set<AuthenticatedSocket>>();
+const localUserSockets = new Map<string, Set<AuthenticatedSocket>>();
 const typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
 // Add socket to local user tracking
@@ -61,7 +61,7 @@ function removeLocalUserSocket(socket: AuthenticatedSocket) {
 // Add socket to local conversation tracking
 function addLocalConversationSocket(
   socket: AuthenticatedSocket,
-  conversationId: number,
+  conversationId: string,
 ) {
   if (!localConversationSockets.has(conversationId)) {
     localConversationSockets.set(conversationId, new Set());
@@ -83,7 +83,7 @@ function removeLocalConversationSocket(socket: AuthenticatedSocket) {
 }
 
 // Send to all local sockets for a user
-function sendToLocalUser(userId: number, message: any) {
+function sendToLocalUser(userId: string, message: any) {
   const sockets = localUserSockets.get(userId);
   if (!sockets) {
     console.log(`No local sockets found for user ${userId}`);
@@ -108,9 +108,9 @@ function sendToLocalUser(userId: number, message: any) {
 
 // Send to all local sockets in a conversation
 function sendToLocalConversation(
-  conversationId: number,
+  conversationId: string,
   message: any,
-  excludeUserId?: number,
+  excludeUserId?: string,
 ) {
   const sockets = localConversationSockets.get(conversationId);
   if (!sockets) return;
@@ -126,7 +126,7 @@ function sendToLocalConversation(
 }
 
 // Broadcast to user across all servers via Redis
-export async function broadcastToUser(userId: number, message: any) {
+export async function broadcastToUser(userId: string, message: any) {
   // Send to local sockets first
   sendToLocalUser(userId, message);
   // Publish to Redis for other servers
@@ -135,9 +135,9 @@ export async function broadcastToUser(userId: number, message: any) {
 
 // Broadcast to conversation across all servers via Redis
 export async function broadcastToConversation(
-  conversationId: number,
+  conversationId: string,
   message: any,
-  excludeUserId?: number,
+  excludeUserId?: string,
 ) {
   // Send to local sockets first
   sendToLocalConversation(conversationId, message, excludeUserId);
@@ -152,7 +152,7 @@ export async function broadcastToConversation(
 // Verify token and get user info
 async function verifyToken(
   token: string,
-): Promise<{ userId: number; username: string } | null> {
+): Promise<{ userId: string; username: string } | null> {
   try {
     const sessions = await sql`
       SELECT s.*, u.id as user_id, u.username
@@ -395,7 +395,7 @@ export function createWebSocketServer(port: number) {
           if (updatedMessages.length === 0) return;
 
           // Group message IDs by sender
-          const messagesBySender = new Map<number, number[]>();
+          const messagesBySender = new Map<string, string[]>();
           for (const msg of updatedMessages) {
             if (!messagesBySender.has(msg.sender_id)) {
               messagesBySender.set(msg.sender_id, []);

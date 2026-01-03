@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { sql } from "../db/index.js";
-import { broadcastToConversation } from "../websocket.js";
+import { broadcastToConversation, broadcastToUser } from "../websocket.js";
 
 interface AuthUser {
-  user_id: number;
+  user_id: string;
   username: string;
   display_name: string;
   avatar_url: string;
@@ -83,7 +83,17 @@ conversations.get("/", async (c) => {
         WHERE conversation_id = c.id 
         ORDER BY created_at DESC 
         LIMIT 1
-      ) as last_message_time
+      ) as last_message_time,
+      (
+        SELECT COUNT(*)::integer FROM messages m
+        WHERE m.conversation_id = c.id 
+        AND m.sender_id != ${user.user_id}
+        AND m.created_at > COALESCE(
+          (SELECT last_read_at FROM conversation_reads 
+           WHERE user_id = ${user.user_id} AND conversation_id = c.id),
+          '1970-01-01'::timestamp
+        )
+      ) as unread_count
     FROM conversations c
     JOIN users u1 ON c.user1_id = u1.id
     JOIN users u2 ON c.user2_id = u2.id
@@ -92,6 +102,29 @@ conversations.get("/", async (c) => {
   `;
 
   return c.json({ conversations: results });
+});
+
+// Get total unread count across all conversations
+conversations.get("/unread-count", async (c) => {
+  const user = c.get("user");
+
+  const result = await sql`
+    SELECT COALESCE(SUM(unread)::integer, 0) as total_unread
+    FROM (
+      SELECT COUNT(*) as unread
+      FROM messages m
+      JOIN conversations c ON m.conversation_id = c.id
+      WHERE (c.user1_id = ${user.user_id} OR c.user2_id = ${user.user_id})
+        AND m.sender_id != ${user.user_id}
+        AND m.created_at > COALESCE(
+          (SELECT last_read_at FROM conversation_reads 
+           WHERE user_id = ${user.user_id} AND conversation_id = c.id),
+          '1970-01-01'::timestamp
+        )
+    ) counts
+  `;
+
+  return c.json({ unread_count: result[0].total_unread });
 });
 
 // Get or create a conversation with a specific user by username
@@ -178,9 +211,9 @@ conversations.post("/with/:username", async (c) => {
     }
   }
 
-  // Ensure consistent ordering (lower id first)
-  const user1Id = Math.min(user.user_id, targetUser.id);
-  const user2Id = Math.max(user.user_id, targetUser.id);
+  // Ensure consistent ordering (alphabetically lower UUID first)
+  const user1Id = user.user_id < targetUser.id ? user.user_id : targetUser.id;
+  const user2Id = user.user_id < targetUser.id ? targetUser.id : user.user_id;
 
   // Try to find existing conversation
   let convResults = await sql`
@@ -224,14 +257,14 @@ conversations.post("/with/:username", async (c) => {
 // Get messages in a conversation
 conversations.get("/:id/messages", async (c) => {
   const user = c.get("user");
-  const conversationId = parseInt(c.req.param("id"));
+  const conversationId = c.req.param("id");
   const limit = parseInt(c.req.query("limit") || "50");
   const before = c.req.query("before"); // message id for pagination
 
   // Verify user is part of this conversation
   const convCheck = await sql`
     SELECT id FROM conversations
-    WHERE id = ${conversationId} 
+    WHERE id = ${conversationId}::uuid 
     AND (user1_id = ${user.user_id} OR user2_id = ${user.user_id})
   `;
 
@@ -246,7 +279,7 @@ conversations.get("/:id/messages", async (c) => {
              u.username as sender_username, u.display_name as sender_display_name, u.avatar_url as sender_avatar
       FROM messages m
       JOIN users u ON m.sender_id = u.id
-      WHERE m.conversation_id = ${conversationId} AND m.id < ${parseInt(before)}
+      WHERE m.conversation_id = ${conversationId}::uuid AND m.id < ${before}::uuid
       ORDER BY m.created_at DESC
       LIMIT ${limit}
     `;
@@ -256,7 +289,7 @@ conversations.get("/:id/messages", async (c) => {
              u.username as sender_username, u.display_name as sender_display_name, u.avatar_url as sender_avatar
       FROM messages m
       JOIN users u ON m.sender_id = u.id
-      WHERE m.conversation_id = ${conversationId}
+      WHERE m.conversation_id = ${conversationId}::uuid
       ORDER BY m.created_at DESC
       LIMIT ${limit}
     `;
@@ -275,11 +308,11 @@ conversations.get("/:id/messages", async (c) => {
 // Send a message
 conversations.post("/:id/messages", async (c) => {
   const user = c.get("user");
-  const conversationId = parseInt(c.req.param("id"));
+  const conversationId = c.req.param("id");
   const body = await c.req.json();
   const content = body.content?.trim();
 
-  if (!content) {
+  if (!content || typeof content !== "string" || content.trim().length === 0) {
     return c.json({ error: "Message content is required" }, 400);
   }
 
@@ -287,10 +320,10 @@ conversations.post("/:id/messages", async (c) => {
     return c.json({ error: "Message too long (max 5000 characters)" }, 400);
   }
 
-  // Verify user is part of this conversation
+  // Verify user is part of this conversation and get the other user
   const convCheck = await sql`
-    SELECT id FROM conversations
-    WHERE id = ${conversationId} 
+    SELECT id, user1_id, user2_id FROM conversations
+    WHERE id = ${conversationId}::uuid 
     AND (user1_id = ${user.user_id} OR user2_id = ${user.user_id})
   `;
 
@@ -298,16 +331,22 @@ conversations.post("/:id/messages", async (c) => {
     return c.json({ error: "Conversation not found" }, 404);
   }
 
+  const conversation = convCheck[0];
+  const otherUserId =
+    conversation.user1_id === user.user_id
+      ? conversation.user2_id
+      : conversation.user1_id;
+
   // Insert message
   const newMessages = await sql`
     INSERT INTO messages (conversation_id, sender_id, content)
-    VALUES (${conversationId}, ${user.user_id}, ${content})
+    VALUES (${conversationId}::uuid, ${user.user_id}, ${content})
     RETURNING id, content, created_at, sender_id
   `;
 
   // Update conversation updated_at
   await sql`
-    UPDATE conversations SET updated_at = NOW() WHERE id = ${conversationId}
+    UPDATE conversations SET updated_at = NOW() WHERE id = ${conversationId}::uuid
   `;
 
   const message = newMessages[0];
@@ -325,10 +364,47 @@ conversations.post("/:id/messages", async (c) => {
   // Broadcast to all WebSocket connections for this conversation
   broadcastToConversation(conversationId, {
     type: "new_message",
+    conversationId: conversationId,
     message: messageData,
   });
 
+  // Also send directly to the other user (in case they're on the list view, not in this conversation)
+  if (otherUserId) {
+    broadcastToUser(otherUserId, {
+      type: "new_message",
+      conversationId: conversationId,
+      message: messageData,
+    });
+  }
+
   return c.json({ message: messageData });
+});
+
+// Mark conversation as read (update last_read_at timestamp)
+conversations.post("/:id/read", async (c) => {
+  const user = c.get("user");
+  const conversationId = c.req.param("id");
+
+  // Verify user is part of this conversation
+  const convCheck = await sql`
+    SELECT id FROM conversations
+    WHERE id = ${conversationId}::uuid 
+    AND (user1_id = ${user.user_id} OR user2_id = ${user.user_id})
+  `;
+
+  if (convCheck.length === 0) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  // Upsert the conversation_reads entry
+  await sql`
+    INSERT INTO conversation_reads (user_id, conversation_id, last_read_at)
+    VALUES (${user.user_id}, ${conversationId}::uuid, NOW())
+    ON CONFLICT (user_id, conversation_id) 
+    DO UPDATE SET last_read_at = NOW()
+  `;
+
+  return c.json({ success: true });
 });
 
 export default conversations;

@@ -13,7 +13,7 @@ const STATUS_ICONS = {
 
 // Update message status directly in the DOM (for read receipts when chat is open)
 function updateMessageStatusInDOM(
-  messageIds: number[],
+  messageIds: string[],
   status: "sent" | "read"
 ) {
   // Find the chat drawer
@@ -94,31 +94,32 @@ export function openLoginPage(): void {
 // ============= Conversations API =============
 
 export interface Conversation {
-  id: number
+  id: string
   created_at: string
   updated_at: string
-  other_user_id: number
+  other_user_id: string
   other_username: string
   other_display_name: string
   other_avatar_url: string
   other_has_account: boolean
   last_message: string | null
   last_message_time: string | null
+  unread_count: number
 }
 
 export interface Message {
-  id: number
+  id: string
   content: string
   created_at: string
   read_at: string | null
-  sender_id: number
+  sender_id: string
   sender_username: string
   sender_display_name: string
   sender_avatar: string
 }
 
 export interface OtherUser {
-  id: number
+  id: string
   username: string
   display_name: string
   avatar_url: string
@@ -137,9 +138,21 @@ export async function getConversations(): Promise<Conversation[]> {
   }
 }
 
+// Get total unread message count
+export async function getTotalUnreadCount(): Promise<number> {
+  try {
+    const response = await fetchWithAuth("/conversations/unread-count")
+    if (!response.ok) return 0
+    const data = await response.json()
+    return data.unread_count || 0
+  } catch {
+    return 0
+  }
+}
+
 // Get or create a conversation with a user by username
 export async function getOrCreateConversation(username: string): Promise<{
-  conversation: { id: number; other_user: OtherUser } | null
+  conversation: { id: string; other_user: OtherUser } | null
   created: boolean
   error?: string
 }> {
@@ -165,8 +178,8 @@ export async function getOrCreateConversation(username: string): Promise<{
 
 // Get messages in a conversation
 export async function getMessages(
-  conversationId: number,
-  before?: number
+  conversationId: string,
+  before?: string
 ): Promise<Message[]> {
   try {
     const params = before ? `?before=${before}` : ""
@@ -183,7 +196,7 @@ export async function getMessages(
 
 // Send a message
 export async function sendMessage(
-  conversationId: number,
+  conversationId: string,
   content: string
 ): Promise<Message | null> {
   try {
@@ -203,17 +216,42 @@ export async function sendMessage(
   }
 }
 
+// Mark a conversation as read
+export async function markConversationAsRead(
+  conversationId: string
+): Promise<void> {
+  try {
+    await fetchWithAuth(`/conversations/${conversationId}/read`, {
+      method: "POST"
+    })
+  } catch {
+    // Silently fail - not critical
+  }
+}
+
 // WebSocket connection management
 const WS_URL = process.env.PLASMO_PUBLIC_WS_URL || "ws://localhost:8586"
 
 let ws: WebSocket | null = null
 let wsReconnectTimeout: ReturnType<typeof setTimeout> | null = null
 let wsAuthenticated = false
-let currentConversationId: number | null = null
+let currentConversationId: string | null = null
 let messageCallback: ((message: Message) => void) | null = null
-let typingCallback: ((userId: number, username: string) => void) | null = null
-let stopTypingCallback: ((userId: number) => void) | null = null
-let messagesReadCallback: ((messageIds: number[]) => void) | null = null
+let typingCallback: ((userId: string, username: string) => void) | null = null
+let stopTypingCallback: ((userId: string) => void) | null = null
+let messagesReadCallback: ((messageIds: string[]) => void) | null = null
+
+// Global callback for any new message (used to update conversation list)
+let globalMessageCallback:
+  | ((conversationId: string, message: Message) => void)
+  | null = null
+
+// Set a global message listener for updating the conversation list
+export function setGlobalMessageListener(
+  callback: ((conversationId: string, message: Message) => void) | null
+): void {
+  globalMessageCallback = callback
+}
 
 function connectWebSocket(token: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -250,8 +288,15 @@ function connectWebSocket(token: string): Promise<void> {
           return
         }
 
-        if (data.type === "new_message" && data.message && messageCallback) {
-          messageCallback(data.message)
+        if (data.type === "new_message" && data.message) {
+          // Call the conversation-specific callback if set
+          if (messageCallback) {
+            messageCallback(data.message)
+          }
+          // Also call the global callback for list updates
+          if (globalMessageCallback && data.conversationId) {
+            globalMessageCallback(data.conversationId, data.message)
+          }
         }
 
         if (data.type === "typing" && typingCallback) {
@@ -269,7 +314,7 @@ function connectWebSocket(token: string): Promise<void> {
 
           // Always try to update the DOM directly for read receipts
           // This handles the case where the chat is open but callbacks aren't set
-          const messageIds = data.messageIds as number[]
+          const messageIds = data.messageIds as string[]
           if (messageIds && messageIds.length > 0) {
             updateMessageStatusInDOM(messageIds, "read")
           }
@@ -315,14 +360,14 @@ function connectWebSocket(token: string): Promise<void> {
 
 export interface ConversationCallbacks {
   onMessage: (message: Message) => void
-  onTyping?: (userId: number, username: string) => void
-  onStopTyping?: (userId: number) => void
-  onMessagesRead?: (messageIds: number[]) => void
+  onTyping?: (userId: string, username: string) => void
+  onStopTyping?: (userId: string) => void
+  onMessagesRead?: (messageIds: string[]) => void
 }
 
 // Join a conversation for real-time updates
 export async function joinConversation(
-  conversationId: number,
+  conversationId: string,
   callbacks: ConversationCallbacks
 ): Promise<() => void> {
   const token = await getToken()
@@ -394,7 +439,7 @@ export function sendStopTyping() {
 }
 
 // Mark messages as read
-export function markMessagesAsRead(messageIds: number[]) {
+export function markMessagesAsRead(messageIds: string[]) {
   console.log("markMessagesAsRead called:", messageIds)
   console.log(
     "ws exists:",

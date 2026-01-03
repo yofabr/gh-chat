@@ -1,5 +1,11 @@
 // List view rendering and logic
-import { getConversations, getMessages, type Conversation } from "~lib/api"
+import {
+  getConversations,
+  getMessages,
+  setGlobalMessageListener,
+  type Conversation,
+  type Message
+} from "~lib/api"
 
 import { renderConversationViewAnimated } from "./conversation-view"
 import {
@@ -7,6 +13,8 @@ import {
   CHAT_LIST_CACHE_TTL,
   chatDrawer,
   chatListCache,
+  currentUserId,
+  currentView,
   getNavigationCallbacks,
   messageCache,
   setChatListCache
@@ -15,7 +23,7 @@ import type { ChatPreview } from "./types"
 import { escapeHtml, formatRelativeTime } from "./utils"
 
 // Prefetch messages for a conversation in the background
-export async function prefetchMessages(conversationId: number): Promise<void> {
+export async function prefetchMessages(conversationId: string): Promise<void> {
   const cached = messageCache.get(conversationId)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) return
 
@@ -44,7 +52,8 @@ export async function getAllChats(): Promise<ChatPreview[]> {
     lastMessageTime: conv.last_message_time
       ? new Date(conv.last_message_time).getTime()
       : new Date(conv.updated_at).getTime(),
-    unread: false,
+    unread: conv.unread_count > 0,
+    unreadCount: conv.unread_count,
     hasAccount: conv.other_has_account,
     conversationId: conv.id
   }))
@@ -53,6 +62,100 @@ export async function getAllChats(): Promise<ChatPreview[]> {
   setChatListCache({ chats, timestamp: Date.now() })
 
   return chats
+}
+
+// Update a single conversation in the list when a new message arrives
+function updateConversationInList(
+  conversationId: string,
+  message: Message
+): void {
+  // Only update if we're on the list view
+  if (currentView !== "list" || !chatDrawer) return
+
+  // Update the message cache so the conversation shows the new message when opened
+  const cached = messageCache.get(conversationId)
+  if (cached) {
+    // Add the new message to the cache
+    cached.messages.push(message)
+    cached.timestamp = Date.now()
+  }
+
+  // Check if this is our own message (don't show unread for sent messages)
+  const isOwnMessage = message.sender_id === currentUserId
+
+  const listItem = chatDrawer.querySelector(
+    `.github-chat-list-item[data-conversation-id="${conversationId}"]`
+  )
+
+  if (listItem) {
+    // Update the preview text
+    const preview = listItem.querySelector(".github-chat-list-preview")
+    if (preview) {
+      preview.textContent = message.content
+    }
+
+    // Update the time
+    const time = listItem.querySelector(".github-chat-list-time")
+    if (time) {
+      time.textContent = formatRelativeTime(Date.now())
+    }
+
+    // Only show unread badge for messages from others
+    if (!isOwnMessage) {
+      // Increment unread count badge
+      const messageRow = listItem.querySelector(".github-chat-list-message-row")
+      let badge = listItem.querySelector(".github-chat-list-unread-badge")
+      if (badge) {
+        const currentCount = parseInt(badge.textContent || "0") || 0
+        const newCount = currentCount + 1
+        badge.textContent = newCount > 99 ? "99+" : String(newCount)
+      } else if (messageRow) {
+        // Create new badge
+        badge = document.createElement("span")
+        badge.className = "github-chat-list-unread-badge"
+        badge.textContent = "1"
+        messageRow.appendChild(badge)
+      }
+
+      // Add unread class
+      listItem.classList.add("unread")
+
+      // Also update the header unread badge
+      const nav = getNavigationCallbacks()
+      nav?.refreshUnreadBadge()
+    }
+
+    // Move to top of list
+    const chatList = chatDrawer.querySelector(".github-chat-list")
+    if (chatList && listItem.parentElement === chatList) {
+      chatList.insertBefore(listItem, chatList.firstChild)
+    }
+  } else {
+    // Conversation not in list - refresh the whole list
+    getAllChats().then((freshChats) => {
+      const viewEl =
+        chatDrawer?.querySelector(".github-chat-view") || chatDrawer
+      if (viewEl) {
+        viewEl.innerHTML = generateListViewInnerHTML(freshChats)
+        setupListViewEventListeners(freshChats, viewEl as Element)
+      }
+      // Update header badge
+      const nav = getNavigationCallbacks()
+      nav?.refreshUnreadBadge()
+    })
+  }
+}
+
+// Start listening for new messages to update the list
+export function startListMessageListener(): void {
+  setGlobalMessageListener((conversationId, message) => {
+    updateConversationInList(conversationId, message)
+  })
+}
+
+// Stop listening for new messages
+export function stopListMessageListener(): void {
+  setGlobalMessageListener(null)
 }
 
 // Generate list view inner HTML
@@ -82,7 +185,7 @@ export function generateListViewInnerHTML(chats: ChatPreview[]): string {
           : chats
               .map(
                 (chat) => `
-            <div class="github-chat-list-item" data-username="${chat.username}" data-conversation-id="${chat.conversationId}">
+            <div class="github-chat-list-item${chat.unread ? " unread" : ""}" data-username="${chat.username}" data-conversation-id="${chat.conversationId}">
               <div class="github-chat-list-avatar-wrapper">
                 <img src="${chat.avatar}" alt="${chat.displayName}" class="github-chat-list-avatar" />
                 ${!chat.hasAccount ? '<span class="github-chat-not-on-platform-badge" title="Not on GitHub Chat yet">!</span>' : ""}
@@ -92,7 +195,10 @@ export function generateListViewInnerHTML(chats: ChatPreview[]): string {
                   <span class="github-chat-list-name">${escapeHtml(chat.displayName)}</span>
                   <span class="github-chat-list-time">${formatRelativeTime(chat.lastMessageTime)}</span>
                 </div>
-                <p class="github-chat-list-preview">${escapeHtml(chat.lastMessage)}</p>
+                <div class="github-chat-list-message-row">
+                  <p class="github-chat-list-preview">${escapeHtml(chat.lastMessage)}</p>
+                  ${chat.unreadCount && chat.unreadCount > 0 ? `<span class="github-chat-list-unread-badge">${chat.unreadCount > 99 ? "99+" : chat.unreadCount}</span>` : ""}
+                </div>
               </div>
             </div>
           `
@@ -128,7 +234,7 @@ export function setupListViewEventListeners(
           username,
           chat?.displayName || username,
           chat?.avatar || `https://github.com/${username}.png`,
-          conversationId ? parseInt(conversationId) : undefined
+          conversationId || undefined
         )
       }
     })
@@ -139,17 +245,69 @@ export function setupListViewEventListeners(
 export async function renderListView(): Promise<void> {
   if (!chatDrawer) return
 
-  const chats = await getAllChats()
-  chatDrawer.innerHTML = generateListViewInnerHTML(chats)
-  setupListViewEventListeners(chats)
+  // Start listening for new messages
+  startListMessageListener()
+
+  // Check for cached chats for instant display
+  const cachedChats =
+    chatListCache && Date.now() - chatListCache.timestamp < CHAT_LIST_CACHE_TTL
+      ? chatListCache.chats
+      : null
+
+  if (cachedChats) {
+    // Use cached data for instant rendering
+    chatDrawer.innerHTML = generateListViewInnerHTML(cachedChats)
+    setupListViewEventListeners(cachedChats)
+
+    // Refresh in background
+    getAllChats().then((freshChats) => {
+      if (chatDrawer) {
+        chatDrawer.innerHTML = generateListViewInnerHTML(freshChats)
+        setupListViewEventListeners(freshChats)
+      }
+    })
+  } else {
+    // Show loading state immediately
+    chatDrawer.innerHTML = `
+      <div class="github-chat-header">
+        <div class="github-chat-user-info">
+          <span class="github-chat-display-name">Messages</span>
+          <span class="github-chat-username">Loading...</span>
+        </div>
+        <button class="github-chat-close" aria-label="Close">
+          <svg viewBox="0 0 16 16" width="16" height="16">
+            <path fill="currentColor" d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="github-chat-list" style="display: flex; align-items: center; justify-content: center;">
+        <div class="github-chat-loading-spinner"></div>
+      </div>
+    `
+
+    // Add close button listener
+    const closeBtn = chatDrawer.querySelector(".github-chat-close")
+    closeBtn?.addEventListener("click", () => {
+      const nav = getNavigationCallbacks()
+      nav?.closeChatDrawer()
+    })
+
+    // Fetch chats and render
+    const chats = await getAllChats()
+    chatDrawer.innerHTML = generateListViewInnerHTML(chats)
+    setupListViewEventListeners(chats)
+  }
 }
 
 // Render list view with animation (uses cache for instant display)
 export function renderListViewAnimated(animationClass: string): void {
   if (!chatDrawer) return
 
+  // Start listening for new messages
+  startListMessageListener()
+
   // Use cached chats for instant rendering
-  const chats =
+  const cachedChats =
     chatListCache && Date.now() - chatListCache.timestamp < CHAT_LIST_CACHE_TTL
       ? chatListCache.chats
       : []
@@ -157,7 +315,7 @@ export function renderListViewAnimated(animationClass: string): void {
   // Create new view element with animation
   const viewEl = document.createElement("div")
   viewEl.className = `github-chat-view ${animationClass}`
-  viewEl.innerHTML = generateListViewInnerHTML(chats)
+  viewEl.innerHTML = generateListViewInnerHTML(cachedChats)
 
   // Remove old view after animation
   const oldView = chatDrawer.querySelector(".github-chat-view")
@@ -172,8 +330,14 @@ export function renderListViewAnimated(animationClass: string): void {
   }
 
   chatDrawer.appendChild(viewEl)
-  setupListViewEventListeners(chats, viewEl)
+  setupListViewEventListeners(cachedChats, viewEl)
 
-  // Refresh chats in background
-  getAllChats()
+  // Always refresh chats in background and update the view
+  getAllChats().then((freshChats) => {
+    // Always re-render with fresh data to update unread counts
+    if (viewEl.isConnected) {
+      viewEl.innerHTML = generateListViewInnerHTML(freshChats)
+      setupListViewEventListeners(freshChats, viewEl)
+    }
+  })
 }

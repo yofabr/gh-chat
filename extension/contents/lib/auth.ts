@@ -11,7 +11,7 @@ export async function checkAuth(): Promise<boolean> {
 
 // Get current user info
 export async function getCurrentUserInfo(): Promise<{
-  id: number
+  id: string
   username: string
 } | null> {
   return new Promise((resolve) => {

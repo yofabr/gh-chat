@@ -7,8 +7,9 @@ export interface ChatPreview {
   lastMessage: string
   lastMessageTime: number
   unread: boolean
+  unreadCount?: number
   hasAccount: boolean
-  conversationId?: number
+  conversationId?: string
 }
 
 export interface CurrentOtherUser {

@@ -1,32 +1,38 @@
 import type { PlasmoCSConfig } from "plasmo"
-import { ensureWebSocketConnected, sendStopTyping } from "~lib/api"
+
+import {
+  ensureWebSocketConnected,
+  getTotalUnreadCount,
+  sendStopTyping
+} from "~lib/api"
+
 import "./github.css"
 
 // Import from modular files
 import { checkAuth, getCurrentUserInfo, openLogin } from "./lib/auth"
-import {
-  isProfilePage,
-  getProfileUsername,
-  getProfileDisplayName,
-  getProfileAvatar
-} from "./lib/profile"
-import { renderListView } from "./lib/list-view"
 import { renderConversationViewInto } from "./lib/conversation-view"
+import { renderListView } from "./lib/list-view"
+import {
+  getProfileAvatar,
+  getProfileDisplayName,
+  getProfileUsername,
+  isProfilePage
+} from "./lib/profile"
 import {
   chatDrawer,
   chatOverlay,
+  currentUserId,
   setChatDrawer,
   setChatOverlay,
-  currentUserId,
-  setCurrentUserId,
   setCurrentConversationId,
   setCurrentOtherUser,
+  setCurrentUserId,
   setCurrentView,
-  typingTimeout,
+  setNavigationCallbacks,
   setTypingTimeout,
-  wsCleanup,
   setWsCleanup,
-  setNavigationCallbacks
+  typingTimeout,
+  wsCleanup
 } from "./lib/state"
 
 export const config: PlasmoCSConfig = {
@@ -132,13 +138,15 @@ async function openChatListDrawer(): Promise<void> {
   }
 
   setCurrentView("list")
-  await renderListView()
 
-  // Open drawer
+  // Open drawer immediately
   requestAnimationFrame(() => {
     overlay?.classList.add("open")
     drawer?.classList.add("open")
   })
+
+  // Render list view (will show loading state or cached data instantly)
+  renderListView()
 }
 
 // Create and open chat drawer (called from profile page)
@@ -191,7 +199,8 @@ setNavigationCallbacks({
   closeChatDrawer,
   goBackToList,
   openChatListDrawer,
-  openChatDrawer
+  openChatDrawer,
+  refreshUnreadBadge: updateUnreadBadge
 })
 
 // ============= UI Injection =============
@@ -240,6 +249,7 @@ function createHeaderChatButton(): HTMLButtonElement {
     <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" class="octicon octicon-comment-discussion">
       <path d="M1.75 1h8.5c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 10.25 10H7.061l-2.574 2.573A1.458 1.458 0 0 1 2 11.543V10h-.25A1.75 1.75 0 0 1 0 8.25v-5.5C0 1.784.784 1 1.75 1ZM1.5 2.75v5.5c0 .138.112.25.25.25h1a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h3.5a.25.25 0 0 0 .25-.25v-5.5a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25Zm13 2a.25.25 0 0 0-.25-.25h-.5a.75.75 0 0 1 0-1.5h.5c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 14.25 12H14v1.543a1.458 1.458 0 0 1-2.487 1.03L9.22 12.28a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215l2.22 2.22v-2.19a.75.75 0 0 1 .75-.75h1a.25.25 0 0 0 .25-.25Z"></path>
     </svg>
+    <span class="github-chat-unread-badge" style="display: none;"></span>
   `
   button.addEventListener("click", async () => {
     const isAuth = await checkAuth()
@@ -338,6 +348,31 @@ function injectChatButton(): void {
 
 // ============= Initialization =============
 
+// Update unread badge on header button
+async function updateUnreadBadge(): Promise<void> {
+  const badge = document.querySelector(".github-chat-unread-badge")
+  if (!badge) return
+
+  // Only fetch if authenticated
+  const isAuth = await checkAuth()
+  if (!isAuth) {
+    ;(badge as HTMLElement).style.display = "none"
+    return
+  }
+
+  try {
+    const unreadCount = await getTotalUnreadCount()
+    if (unreadCount > 0) {
+      badge.textContent = unreadCount > 99 ? "99+" : String(unreadCount)
+      ;(badge as HTMLElement).style.display = "flex"
+    } else {
+      ;(badge as HTMLElement).style.display = "none"
+    }
+  } catch {
+    ;(badge as HTMLElement).style.display = "none"
+  }
+}
+
 // Initialize for profile pages
 function initProfilePage(): void {
   if (!isProfilePage()) return
@@ -349,6 +384,24 @@ function initProfilePage(): void {
 // Initialize header button
 function initHeaderButton(): void {
   injectHeaderChatButton()
+  // Update unread badge after button is injected
+  updateUnreadBadge()
+}
+
+// Start polling for unread count updates
+let unreadPollInterval: ReturnType<typeof setInterval> | null = null
+
+function startUnreadPolling(): void {
+  if (unreadPollInterval) return
+  // Poll every 30 seconds for new messages
+  unreadPollInterval = setInterval(updateUnreadBadge, 30000)
+}
+
+function stopUnreadPolling(): void {
+  if (unreadPollInterval) {
+    clearInterval(unreadPollInterval)
+    unreadPollInterval = null
+  }
 }
 
 // Listen for auth success messages from frontend
@@ -366,12 +419,14 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
     initHeaderButton()
     initProfilePage()
+    startUnreadPolling()
     // Connect WebSocket early to receive read receipts even when chat is closed
     ensureWebSocketConnected().catch(console.error)
   })
 } else {
   initHeaderButton()
   initProfilePage()
+  startUnreadPolling()
   // Connect WebSocket early to receive read receipts even when chat is closed
   ensureWebSocketConnected().catch(console.error)
 }

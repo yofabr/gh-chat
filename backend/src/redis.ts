@@ -13,8 +13,8 @@ let redisPub: Redis | null = null;
 
 // Local event emitter for pub/sub messages
 type MessageHandler = (message: any) => void;
-const userHandlers = new Map<number, Set<MessageHandler>>();
-const conversationHandlers = new Map<number, Set<MessageHandler>>();
+const userHandlers = new Map<string, Set<MessageHandler>>();
+const conversationHandlers = new Map<string, Set<MessageHandler>>();
 
 // Initialize Redis connections
 export function initRedis() {
@@ -34,7 +34,7 @@ export function initRedis() {
 
       // User channel: user:{userId}
       if (channel.startsWith("user:")) {
-        const userId = parseInt(channel.split(":")[1]);
+        const userId = channel.split(":")[1];
         const handlers = userHandlers.get(userId);
         if (handlers) {
           handlers.forEach((handler) => handler(data));
@@ -43,7 +43,7 @@ export function initRedis() {
 
       // Conversation channel: conv:{conversationId}
       if (channel.startsWith("conv:")) {
-        const convId = parseInt(channel.split(":")[1]);
+        const convId = channel.split(":")[1];
         const handlers = conversationHandlers.get(convId);
         if (handlers) {
           handlers.forEach((handler) => handler(data));
@@ -70,50 +70,46 @@ const USER_PRESENCE_KEY = "user:presence";
 const USER_CONVERSATION_KEY = "user:conversation";
 const PRESENCE_TTL = 60; // seconds
 
-export async function registerUserConnection(userId: number): Promise<void> {
+export async function registerUserConnection(userId: string): Promise<void> {
   const r = getRedis();
-  await r.zadd(USER_PRESENCE_KEY, Date.now(), userId.toString());
+  await r.zadd(USER_PRESENCE_KEY, Date.now(), userId);
 }
 
-export async function unregisterUserConnection(userId: number): Promise<void> {
+export async function unregisterUserConnection(userId: string): Promise<void> {
   const r = getRedis();
-  await r.zrem(USER_PRESENCE_KEY, userId.toString());
-  await r.hdel(USER_CONVERSATION_KEY, userId.toString());
+  await r.zrem(USER_PRESENCE_KEY, userId);
+  await r.hdel(USER_CONVERSATION_KEY, userId);
 }
 
-export async function isUserOnline(userId: number): Promise<boolean> {
+export async function isUserOnline(userId: string): Promise<boolean> {
   const r = getRedis();
-  const score = await r.zscore(USER_PRESENCE_KEY, userId.toString());
+  const score = await r.zscore(USER_PRESENCE_KEY, userId);
   return score !== null;
 }
 
 export async function setUserConversation(
-  userId: number,
-  conversationId: number | null,
+  userId: string,
+  conversationId: string | null,
 ): Promise<void> {
   const r = getRedis();
   if (conversationId) {
-    await r.hset(
-      USER_CONVERSATION_KEY,
-      userId.toString(),
-      conversationId.toString(),
-    );
+    await r.hset(USER_CONVERSATION_KEY, userId, conversationId);
   } else {
-    await r.hdel(USER_CONVERSATION_KEY, userId.toString());
+    await r.hdel(USER_CONVERSATION_KEY, userId);
   }
 }
 
 export async function getUserConversation(
-  userId: number,
-): Promise<number | null> {
+  userId: string,
+): Promise<string | null> {
   const r = getRedis();
-  const convId = await r.hget(USER_CONVERSATION_KEY, userId.toString());
-  return convId ? parseInt(convId) : null;
+  const convId = await r.hget(USER_CONVERSATION_KEY, userId);
+  return convId || null;
 }
 
 // Pub/Sub for user messages (read receipts, etc.)
 export async function publishToUser(
-  userId: number,
+  userId: string,
   message: any,
 ): Promise<void> {
   if (!redisPub) return;
@@ -121,7 +117,7 @@ export async function publishToUser(
 }
 
 export async function subscribeToUser(
-  userId: number,
+  userId: string,
   handler: MessageHandler,
 ): Promise<() => void> {
   if (!redisSub) {
@@ -152,7 +148,7 @@ export async function subscribeToUser(
 
 // Pub/Sub for conversation messages (typing, new messages, etc.)
 export async function publishToConversation(
-  conversationId: number,
+  conversationId: string,
   message: any,
 ): Promise<void> {
   if (!redisPub) return;
@@ -160,7 +156,7 @@ export async function publishToConversation(
 }
 
 export async function subscribeToConversation(
-  conversationId: number,
+  conversationId: string,
   handler: MessageHandler,
 ): Promise<() => void> {
   if (!redisSub) {

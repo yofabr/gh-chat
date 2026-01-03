@@ -16,9 +16,13 @@ export const sql = postgres(connectionString, {
 
 // Initialize database tables
 export async function initDb() {
+  // Enable UUID extension
+  await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
+
+  // Create users table
   await sql`
     CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       github_id INTEGER UNIQUE NOT NULL,
       username VARCHAR(255) UNIQUE NOT NULL,
       display_name VARCHAR(255),
@@ -30,68 +34,60 @@ export async function initDb() {
     )
   `;
 
-  // Add has_account column if it doesn't exist (for existing databases)
-  await sql`
-    DO $$ 
-    BEGIN 
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                     WHERE table_name='users' AND column_name='has_account') THEN
-        ALTER TABLE users ADD COLUMN has_account BOOLEAN DEFAULT FALSE;
-      END IF;
-    END $$;
-  `;
-
-  // Update existing users to have has_account = true (they signed up via OAuth)
-  await sql`UPDATE users SET has_account = TRUE WHERE access_token IS NOT NULL AND has_account = FALSE`;
-
+  // Create sessions table
   await sql`
     CREATE TABLE IF NOT EXISTS sessions (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
       token VARCHAR(255) UNIQUE NOT NULL,
       expires_at TIMESTAMP NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `;
 
+  // Create conversations table
   await sql`
     CREATE TABLE IF NOT EXISTS conversations (
-      id SERIAL PRIMARY KEY,
-      user1_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      user2_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user1_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      user2_id UUID REFERENCES users(id) ON DELETE CASCADE,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(user1_id, user2_id)
     )
   `;
 
+  // Create messages table
   await sql`
     CREATE TABLE IF NOT EXISTS messages (
-      id SERIAL PRIMARY KEY,
-      conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
-      sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
+      sender_id UUID REFERENCES users(id) ON DELETE CASCADE,
       content TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT NOW(),
       read_at TIMESTAMP
     )
   `;
 
-  // Add read_at column if it doesn't exist (for existing databases)
+  // Create conversation_reads table (tracks when user last read each conversation)
   await sql`
-    DO $$ 
-    BEGIN 
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                     WHERE table_name='messages' AND column_name='read_at') THEN
-        ALTER TABLE messages ADD COLUMN read_at TIMESTAMP;
-      END IF;
-    END $$;
+    CREATE TABLE IF NOT EXISTS conversation_reads (
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
+      last_read_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (user_id, conversation_id)
+    )
   `;
 
   // Create indexes for better query performance
+  await sql`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_conversations_user1 ON conversations(user1_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_conversations_user2 ON conversations(user2_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_conversation_reads_user ON conversation_reads(user_id)`;
 
-  console.log("Database tables initialized");
+  console.log("Database tables initialized with UUID primary keys");
 }
