@@ -1,55 +1,128 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
 import { sql } from "./db/index.js";
+import {
+  initRedis,
+  registerUserConnection,
+  unregisterUserConnection,
+  setUserConversation,
+  publishToUser,
+  publishToConversation,
+  subscribeToUser,
+  subscribeToConversation,
+  SERVER_ID,
+} from "./redis.js";
 
 interface AuthenticatedSocket extends WebSocket {
   userId?: number;
   username?: string;
   conversationId?: number;
   isAlive?: boolean;
+  cleanupFns?: (() => void)[];
 }
 
-// Map of conversation ID to set of connected sockets
-const conversationSockets = new Map<number, Set<AuthenticatedSocket>>();
-
-// Map of user ID to set of all their connected sockets (for global notifications like read receipts)
-const userSockets = new Map<number, Set<AuthenticatedSocket>>();
-
-// Track typing timeouts per user per conversation
+// Local socket tracking (for this server instance only)
+const localConversationSockets = new Map<number, Set<AuthenticatedSocket>>();
+const localUserSockets = new Map<number, Set<AuthenticatedSocket>>();
 const typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
-// Add socket to user's global socket set
-function addUserSocket(socket: AuthenticatedSocket) {
+// Add socket to local user tracking
+function addLocalUserSocket(socket: AuthenticatedSocket) {
   if (!socket.userId) return;
-  if (!userSockets.has(socket.userId)) {
-    userSockets.set(socket.userId, new Set());
+  if (!localUserSockets.has(socket.userId)) {
+    localUserSockets.set(socket.userId, new Set());
   }
-  userSockets.get(socket.userId)!.add(socket);
+  localUserSockets.get(socket.userId)!.add(socket);
 }
 
-// Remove socket from user's global socket set
-function removeUserSocket(socket: AuthenticatedSocket) {
+// Remove socket from local user tracking
+function removeLocalUserSocket(socket: AuthenticatedSocket) {
   if (!socket.userId) return;
-  const sockets = userSockets.get(socket.userId);
+  const sockets = localUserSockets.get(socket.userId);
   if (sockets) {
     sockets.delete(socket);
     if (sockets.size === 0) {
-      userSockets.delete(socket.userId);
+      localUserSockets.delete(socket.userId);
     }
   }
 }
 
-// Broadcast to a specific user (all their sockets, regardless of which conversation they're in)
-export function broadcastToUser(userId: number, message: any) {
-  const sockets = userSockets.get(userId);
+// Add socket to local conversation tracking
+function addLocalConversationSocket(
+  socket: AuthenticatedSocket,
+  conversationId: number,
+) {
+  if (!localConversationSockets.has(conversationId)) {
+    localConversationSockets.set(conversationId, new Set());
+  }
+  localConversationSockets.get(conversationId)!.add(socket);
+}
+
+// Remove socket from local conversation tracking
+function removeLocalConversationSocket(socket: AuthenticatedSocket) {
+  if (socket.conversationId) {
+    const sockets = localConversationSockets.get(socket.conversationId);
+    if (sockets) {
+      sockets.delete(socket);
+      if (sockets.size === 0) {
+        localConversationSockets.delete(socket.conversationId);
+      }
+    }
+  }
+}
+
+// Send to all local sockets for a user
+function sendToLocalUser(userId: number, message: any) {
+  const sockets = localUserSockets.get(userId);
   if (!sockets) return;
-
   const messageStr = JSON.stringify(message);
-
   sockets.forEach((socket) => {
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(messageStr);
     }
+  });
+}
+
+// Send to all local sockets in a conversation
+function sendToLocalConversation(
+  conversationId: number,
+  message: any,
+  excludeUserId?: number,
+) {
+  const sockets = localConversationSockets.get(conversationId);
+  if (!sockets) return;
+  const messageStr = JSON.stringify(message);
+  sockets.forEach((socket) => {
+    if (
+      socket.userId !== excludeUserId &&
+      socket.readyState === WebSocket.OPEN
+    ) {
+      socket.send(messageStr);
+    }
+  });
+}
+
+// Broadcast to user across all servers via Redis
+export async function broadcastToUser(userId: number, message: any) {
+  // Send to local sockets first
+  sendToLocalUser(userId, message);
+  // Publish to Redis for other servers
+  await publishToUser(userId, { ...message, _sourceServer: SERVER_ID });
+}
+
+// Broadcast to conversation across all servers via Redis
+export async function broadcastToConversation(
+  conversationId: number,
+  message: any,
+  excludeUserId?: number,
+) {
+  // Send to local sockets first
+  sendToLocalConversation(conversationId, message, excludeUserId);
+  // Publish to Redis for other servers
+  await publishToConversation(conversationId, {
+    ...message,
+    _excludeUserId: excludeUserId,
+    _sourceServer: SERVER_ID,
   });
 }
 
@@ -72,74 +145,23 @@ async function verifyToken(
   }
 }
 
-// Broadcast message to all sockets in a conversation except sender
-export function broadcastToConversation(
-  conversationId: number,
-  message: any,
-  excludeUserId?: number,
-) {
-  const sockets = conversationSockets.get(conversationId);
-  if (!sockets) return;
-
-  const messageStr = JSON.stringify(message);
-
-  sockets.forEach((socket) => {
-    if (
-      socket.userId !== excludeUserId &&
-      socket.readyState === WebSocket.OPEN
-    ) {
-      socket.send(messageStr);
-    }
-  });
-}
-
-// Broadcast to specific user in a conversation
-export function broadcastToUserInConversation(
-  conversationId: number,
-  userId: number,
-  message: any,
-) {
-  const sockets = conversationSockets.get(conversationId);
-  if (!sockets) return;
-
-  const messageStr = JSON.stringify(message);
-
-  sockets.forEach((socket) => {
-    if (socket.userId === userId && socket.readyState === WebSocket.OPEN) {
-      socket.send(messageStr);
-    }
-  });
-}
-
-// Check if user is online in a conversation
-export function isUserOnlineInConversation(
-  conversationId: number,
-  userId: number,
-): boolean {
-  const sockets = conversationSockets.get(conversationId);
-  if (!sockets) return false;
-
-  for (const socket of sockets) {
-    if (socket.userId === userId && socket.readyState === WebSocket.OPEN) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // Create WebSocket server
 export function createWebSocketServer(port: number) {
+  // Initialize Redis pub/sub
+  initRedis();
+
   const wss = new WebSocketServer({ port });
 
-  console.log(`WebSocket server running on ws://localhost:${port}`);
+  console.log(
+    `WebSocket server ${SERVER_ID} running on ws://localhost:${port}`,
+  );
 
   // Heartbeat to detect dead connections
   const interval = setInterval(() => {
     wss.clients.forEach((ws) => {
       const socket = ws as AuthenticatedSocket;
       if (socket.isAlive === false) {
-        removeSocketFromConversation(socket);
-        removeUserSocket(socket);
+        cleanupSocket(socket);
         return socket.terminate();
       }
       socket.isAlive = false;
@@ -172,8 +194,21 @@ export function createWebSocketServer(port: number) {
           }
           ws.userId = user.userId;
           ws.username = user.username;
-          // Register this socket globally for the user
-          addUserSocket(ws);
+          ws.cleanupFns = [];
+
+          // Register locally and in Redis
+          addLocalUserSocket(ws);
+          await registerUserConnection(user.userId);
+
+          // Subscribe to user-specific messages from Redis (from other servers)
+          const unsubUser = await subscribeToUser(user.userId, (msg) => {
+            // Don't echo messages from this server
+            if (msg._sourceServer === SERVER_ID) return;
+            const { _sourceServer, ...cleanMsg } = msg;
+            sendToLocalUser(user.userId, cleanMsg);
+          });
+          ws.cleanupFns.push(unsubUser);
+
           ws.send(
             JSON.stringify({ type: "authenticated", userId: user.userId }),
           );
@@ -211,15 +246,29 @@ export function createWebSocketServer(port: number) {
 
           // Leave previous conversation if any
           if (ws.conversationId) {
-            removeSocketFromConversation(ws);
+            await leaveConversation(ws);
           }
 
           // Join new conversation
           ws.conversationId = conversationId;
-          if (!conversationSockets.has(conversationId)) {
-            conversationSockets.set(conversationId, new Set());
-          }
-          conversationSockets.get(conversationId)!.add(ws);
+          addLocalConversationSocket(ws, conversationId);
+          await setUserConversation(ws.userId, conversationId);
+
+          // Subscribe to conversation messages from Redis (from other servers)
+          const unsubConv = await subscribeToConversation(
+            conversationId,
+            (msg) => {
+              // Don't echo messages from this server
+              if (msg._sourceServer === SERVER_ID) return;
+              // Don't send to excluded user
+              if (msg._excludeUserId === ws.userId) return;
+              const { _sourceServer, _excludeUserId, ...cleanMsg } = msg;
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(cleanMsg));
+              }
+            },
+          );
+          ws.cleanupFns!.push(unsubConv);
 
           ws.send(JSON.stringify({ type: "joined", conversationId }));
           return;
@@ -227,13 +276,7 @@ export function createWebSocketServer(port: number) {
 
         // Leave conversation
         if (message.type === "leave") {
-          // Clear typing timeout when leaving
-          const typingKey = `${ws.conversationId}:${ws.userId}`;
-          if (typingTimeouts.has(typingKey)) {
-            clearTimeout(typingTimeouts.get(typingKey)!);
-            typingTimeouts.delete(typingKey);
-          }
-          removeSocketFromConversation(ws);
+          await leaveConversation(ws);
           ws.send(JSON.stringify({ type: "left" }));
           return;
         }
@@ -345,7 +388,7 @@ export function createWebSocketServer(port: number) {
       }
     });
 
-    ws.on("close", () => {
+    ws.on("close", async () => {
       // Clear typing timeout on disconnect
       if (ws.conversationId && ws.userId) {
         const typingKey = `${ws.conversationId}:${ws.userId}`;
@@ -353,36 +396,60 @@ export function createWebSocketServer(port: number) {
           clearTimeout(typingTimeouts.get(typingKey)!);
           typingTimeouts.delete(typingKey);
           // Notify others that user stopped typing
-          broadcastToConversation(
+          await broadcastToConversation(
             ws.conversationId,
             { type: "stop_typing", userId: ws.userId },
             ws.userId,
           );
         }
       }
-      removeSocketFromConversation(ws);
-      removeUserSocket(ws);
+      await cleanupSocket(ws);
     });
 
     ws.on("error", (error) => {
       console.error("WebSocket error:", error);
-      removeSocketFromConversation(ws);
-      removeUserSocket(ws);
+      cleanupSocket(ws).catch(console.error);
     });
   });
 
   return wss;
 }
 
-function removeSocketFromConversation(socket: AuthenticatedSocket) {
-  if (socket.conversationId) {
-    const sockets = conversationSockets.get(socket.conversationId);
-    if (sockets) {
-      sockets.delete(socket);
-      if (sockets.size === 0) {
-        conversationSockets.delete(socket.conversationId);
-      }
-    }
-    socket.conversationId = undefined;
+// Leave a conversation and clean up
+async function leaveConversation(ws: AuthenticatedSocket) {
+  if (!ws.conversationId || !ws.userId) return;
+
+  // Clear typing timeout
+  const typingKey = `${ws.conversationId}:${ws.userId}`;
+  if (typingTimeouts.has(typingKey)) {
+    clearTimeout(typingTimeouts.get(typingKey)!);
+    typingTimeouts.delete(typingKey);
+
+    // Notify others
+    await broadcastToConversation(
+      ws.conversationId,
+      { type: "stop_typing", userId: ws.userId },
+      ws.userId,
+    );
+  }
+
+  removeLocalConversationSocket(ws);
+  await setUserConversation(ws.userId, null);
+  ws.conversationId = undefined;
+}
+
+// Full socket cleanup
+async function cleanupSocket(ws: AuthenticatedSocket) {
+  // Run cleanup functions (Redis subscriptions)
+  if (ws.cleanupFns) {
+    ws.cleanupFns.forEach((fn) => fn());
+  }
+
+  await leaveConversation(ws);
+  removeLocalUserSocket(ws);
+
+  // Unregister from Redis if no more local sockets for this user
+  if (ws.userId && !localUserSockets.has(ws.userId)) {
+    await unregisterUserConnection(ws.userId);
   }
 }
