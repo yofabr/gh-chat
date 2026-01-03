@@ -25,12 +25,17 @@ export const config: PlasmoCSConfig = {
 let currentUsername: string | null = null
 let chatDrawer: HTMLElement | null = null
 let chatOverlay: HTMLElement | null = null
-let chatListDrawer: HTMLElement | null = null
 let currentConversationId: number | null = null
 let currentUserId: number | null = null
 let wsCleanup: (() => void) | null = null
 let pendingMessageId = 0 // For tracking optimistic messages
 let typingTimeout: ReturnType<typeof setTimeout> | null = null
+let currentView: "list" | "conversation" = "list"
+let currentOtherUser: {
+  username: string
+  displayName: string
+  avatar: string
+} | null = null
 
 // Status icons
 const STATUS_ICONS = {
@@ -163,7 +168,7 @@ async function getAllChats(): Promise<ChatPreview[]> {
   }))
 }
 
-// Close chat drawer
+// Close chat drawer completely
 function closeChatDrawer(): void {
   // Clean up typing timeout
   if (typingTimeout) {
@@ -180,6 +185,8 @@ function closeChatDrawer(): void {
     wsCleanup = null
   }
   currentConversationId = null
+  currentOtherUser = null
+  currentView = "list"
 
   if (chatDrawer) {
     chatDrawer.classList.remove("open")
@@ -187,9 +194,30 @@ function closeChatDrawer(): void {
   if (chatOverlay) {
     chatOverlay.classList.remove("open")
   }
-  if (chatListDrawer) {
-    chatListDrawer.classList.remove("open")
+}
+
+// Go back from conversation to list view
+function goBackToList(): void {
+  // Clean up typing timeout
+  if (typingTimeout) {
+    clearTimeout(typingTimeout)
+    typingTimeout = null
   }
+
+  // Stop typing indicator
+  sendStopTyping()
+
+  // Clean up WebSocket connection for this conversation
+  if (wsCleanup) {
+    wsCleanup()
+    wsCleanup = null
+  }
+  currentConversationId = null
+  currentOtherUser = null
+  currentView = "list"
+
+  // Re-render the list view
+  renderListView()
 }
 
 // Format relative time
@@ -218,17 +246,31 @@ async function openChatListDrawer(): Promise<void> {
   }
 
   // Create drawer if not exists
-  if (!chatListDrawer) {
-    chatListDrawer = document.createElement("div")
-    chatListDrawer.className = "github-chat-drawer github-chat-list-drawer"
-    document.body.appendChild(chatListDrawer)
+  if (!chatDrawer) {
+    chatDrawer = document.createElement("div")
+    chatDrawer.className = "github-chat-drawer"
+    document.body.appendChild(chatDrawer)
   }
+
+  currentView = "list"
+  await renderListView()
+
+  // Open drawer
+  requestAnimationFrame(() => {
+    chatOverlay?.classList.add("open")
+    chatDrawer?.classList.add("open")
+  })
+}
+
+// Render list view inside the drawer
+async function renderListView(): Promise<void> {
+  if (!chatDrawer) return
 
   // Load all chats from API
   const chats = await getAllChats()
 
   // Render drawer content
-  chatListDrawer.innerHTML = `
+  chatDrawer.innerHTML = `
     <div class="github-chat-header">
       <div class="github-chat-user-info">
         <span class="github-chat-display-name">Messages</span>
@@ -274,34 +316,25 @@ async function openChatListDrawer(): Promise<void> {
   `
 
   // Add event listeners
-  const closeBtn = chatListDrawer.querySelector(".github-chat-close")
+  const closeBtn = chatDrawer.querySelector(".github-chat-close")
   closeBtn?.addEventListener("click", closeChatDrawer)
 
   // Add click handlers for chat items
-  const chatItems = chatListDrawer.querySelectorAll(".github-chat-list-item")
+  const chatItems = chatDrawer.querySelectorAll(".github-chat-list-item")
   chatItems.forEach((item) => {
     item.addEventListener("click", async () => {
       const username = item.getAttribute("data-username")
       if (username) {
         // Find the chat data
         const chat = chats.find((c: any) => c.username === username)
-        closeChatDrawer()
-        // Small delay to let the list drawer close
-        setTimeout(() => {
-          openChatDrawer(
-            username,
-            chat?.displayName || username,
-            chat?.avatar || `https://github.com/${username}.png`
-          )
-        }, 100)
+        // Switch to conversation view (no closing, just transition)
+        renderConversationView(
+          username,
+          chat?.displayName || username,
+          chat?.avatar || `https://github.com/${username}.png`
+        )
       }
     })
-  })
-
-  // Open drawer
-  requestAnimationFrame(() => {
-    chatOverlay?.classList.add("open")
-    chatListDrawer?.classList.add("open")
   })
 }
 
@@ -311,41 +344,29 @@ function formatTime(timestamp: number): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
 
-// Create and open chat drawer
-async function openChatDrawer(
+// Render conversation view inside the drawer
+async function renderConversationView(
   username: string,
   displayName: string,
   avatar: string
 ): Promise<void> {
-  // Check if authenticated first
-  const isAuth = await checkAuth()
-  if (!isAuth) {
-    openLogin()
-    return
-  }
+  if (!chatDrawer) return
+
+  currentView = "conversation"
+  currentOtherUser = { username, displayName, avatar }
 
   // Get current user info (needed to identify sent messages)
   const userInfo = await getCurrentUserInfo()
   currentUserId = userInfo?.id || null
 
-  // Create overlay if not exists
-  if (!chatOverlay) {
-    chatOverlay = document.createElement("div")
-    chatOverlay.className = "github-chat-overlay"
-    chatOverlay.addEventListener("click", closeChatDrawer)
-    document.body.appendChild(chatOverlay)
-  }
-
-  // Create drawer if not exists
-  if (!chatDrawer) {
-    chatDrawer = document.createElement("div")
-    chatDrawer.className = "github-chat-drawer"
-    document.body.appendChild(chatDrawer)
-  }
-
-  // Show loading state
+  // Show loading state with back button
   chatDrawer.innerHTML = `
     <div class="github-chat-header">
+      <button class="github-chat-back" aria-label="Back">
+        <svg viewBox="0 0 16 16" width="16" height="16">
+          <path fill="currentColor" d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"></path>
+        </svg>
+      </button>
       <img src="${avatar}" alt="${displayName}" class="github-chat-avatar" />
       <div class="github-chat-user-info">
         <span class="github-chat-display-name">${escapeHtml(displayName)}</span>
@@ -370,15 +391,12 @@ async function openChatDrawer(
     </div>
   `
 
-  // Add close button listener immediately
+  // Add back and close button listeners immediately
+  const backBtn = chatDrawer.querySelector(".github-chat-back")
+  backBtn?.addEventListener("click", goBackToList)
+
   const closeBtn = chatDrawer.querySelector(".github-chat-close")
   closeBtn?.addEventListener("click", closeChatDrawer)
-
-  // Open drawer
-  requestAnimationFrame(() => {
-    chatOverlay?.classList.add("open")
-    chatDrawer?.classList.add("open")
-  })
 
   // Get or create conversation
   const result = await getOrCreateConversation(username)
@@ -632,25 +650,16 @@ async function openChatDrawer(
       },
 
       onMessagesRead: (messageIds: number[]) => {
-        console.log("onMessagesRead callback - updating UI for:", messageIds)
         // Update sent messages to show read status
         messageIds.forEach((id) => {
           const msgEl = messagesContainer?.querySelector(
             `[data-message-id="${id}"]`
           )
-          console.log(
-            `Looking for message ${id}:`,
-            msgEl,
-            "isSent:",
-            msgEl?.classList.contains("sent")
-          )
           if (msgEl && msgEl.classList.contains("sent")) {
             const statusEl = msgEl.querySelector(".github-chat-status")
-            console.log("Status element found:", statusEl)
             if (statusEl) {
               statusEl.className = "github-chat-status read"
               statusEl.innerHTML = STATUS_ICONS.read
-              console.log("Updated status to read")
             }
           }
         })
@@ -659,7 +668,6 @@ async function openChatDrawer(
 
     // Now that we're joined, mark any unread messages as read
     if (unreadMessageIds.length > 0) {
-      console.log("Marking unread messages as read:", unreadMessageIds)
       markMessagesAsRead(unreadMessageIds)
     }
   } catch (error) {
@@ -667,6 +675,44 @@ async function openChatDrawer(
   }
 
   input?.focus()
+}
+
+// Create and open chat drawer (called from profile page)
+async function openChatDrawer(
+  username: string,
+  displayName: string,
+  avatar: string
+): Promise<void> {
+  // Check if authenticated first
+  const isAuth = await checkAuth()
+  if (!isAuth) {
+    openLogin()
+    return
+  }
+
+  // Create overlay if not exists
+  if (!chatOverlay) {
+    chatOverlay = document.createElement("div")
+    chatOverlay.className = "github-chat-overlay"
+    chatOverlay.addEventListener("click", closeChatDrawer)
+    document.body.appendChild(chatOverlay)
+  }
+
+  // Create drawer if not exists
+  if (!chatDrawer) {
+    chatDrawer = document.createElement("div")
+    chatDrawer.className = "github-chat-drawer"
+    document.body.appendChild(chatDrawer)
+  }
+
+  // Open drawer first
+  requestAnimationFrame(() => {
+    chatOverlay?.classList.add("open")
+    chatDrawer?.classList.add("open")
+  })
+
+  // Then render conversation view
+  await renderConversationView(username, displayName, avatar)
 }
 
 // Escape HTML to prevent XSS

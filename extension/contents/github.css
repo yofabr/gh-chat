@@ -177,6 +177,36 @@
   fill: currentColor;
 }
 
+/* Back Button */
+.github-chat-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--fgColor-muted, #9198a1);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+  flex-shrink: 0;
+  margin-right: -4px;
+}
+
+.github-chat-back:hover {
+  background: var(--bgColor-neutral-muted, rgba(110, 118, 129, 0.4));
+  color: var(--fgColor-default, #f0f6fc);
+}
+
+.github-chat-back svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
 /* Messages Container */
 .github-chat-messages {
   flex: 1;

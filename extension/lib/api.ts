@@ -16,37 +16,20 @@ function updateMessageStatusInDOM(
   messageIds: number[],
   status: "sent" | "read"
 ) {
-  console.log(
-    `updateMessageStatusInDOM called with ids:`,
-    messageIds,
-    `status:`,
-    status
-  )
-  // Find the chat drawer (not the list drawer)
-  const chatDrawer = document.querySelector(
-    ".github-chat-drawer:not(.github-chat-list-drawer)"
-  )
-  console.log("Chat drawer found:", !!chatDrawer)
+  // Find the chat drawer
+  const chatDrawer = document.querySelector(".github-chat-drawer")
   if (!chatDrawer) return // Chat drawer not open
 
   const messagesContainer = chatDrawer.querySelector(".github-chat-messages")
-  console.log("Messages container found:", !!messagesContainer)
-  if (!messagesContainer) return
+  if (!messagesContainer) return // Not in conversation view
 
   messageIds.forEach((id) => {
     const msgEl = messagesContainer.querySelector(`[data-message-id="${id}"]`)
-    console.log(
-      `Message element for ${id}:`,
-      !!msgEl,
-      msgEl?.classList.contains("sent")
-    )
     if (msgEl && msgEl.classList.contains("sent")) {
       const statusEl = msgEl.querySelector(".github-chat-status")
-      console.log(`Status element for ${id}:`, !!statusEl)
       if (statusEl) {
         statusEl.className = `github-chat-status ${status}`
         statusEl.innerHTML = STATUS_ICONS[status]
-        console.log(`Updated message ${id} status to ${status} via DOM`)
       }
     }
   })
