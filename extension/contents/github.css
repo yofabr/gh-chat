@@ -1,0 +1,552 @@
+/* GitHub Chat Button - Profile (under follow/sponsor) */
+.github-chat-btn-profile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--borderColor-default, #3d444d);
+  background-color: var(--bgColor-default, #0d1117);
+  color: var(--fgColor-default, #f0f6fc);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+    Helvetica, Arial, sans-serif;
+}
+
+.github-chat-btn-profile:hover {
+  background-color: var(--bgColor-neutral-muted, #262c36);
+  border-color: var(--borderColor-muted, #6e7681);
+}
+
+.github-chat-btn-profile:active {
+  background-color: var(--bgColor-neutral-emphasis, #3d444d);
+}
+
+.github-chat-btn-profile svg.octicon {
+  fill: currentColor;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.github-chat-btn-profile span {
+  flex-shrink: 0;
+}
+
+/* GitHub Chat Button - Header Nav */
+.github-chat-header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  color: var(--fgColor-muted, #9198a1);
+}
+
+.github-chat-header-btn:hover {
+  background-color: var(--bgColor-neutral-muted, rgba(110, 118, 129, 0.4));
+  color: var(--fgColor-default, #f0f6fc);
+}
+
+.github-chat-header-btn svg {
+  fill: currentColor;
+  width: 16px;
+  height: 16px;
+}
+
+/* Chat Drawer Overlay */
+.github-chat-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.github-chat-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Chat Drawer */
+.github-chat-drawer {
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 400px;
+  max-width: 100vw;
+  height: 100vh;
+  background: var(--bgColor-default, #0d1117);
+  border-left: 1px solid var(--borderColor-default, #3d444d);
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+    Helvetica, Arial, sans-serif;
+  transition: right 0.3s ease;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.github-chat-drawer.open {
+  right: 0;
+}
+
+/* Chat Header */
+.github-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--borderColor-default, #3d444d);
+  background: var(--bgColor-muted, #161b22);
+}
+
+.github-chat-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.github-chat-user-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.github-chat-display-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fgColor-default, #f0f6fc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.github-chat-username {
+  font-size: 12px;
+  color: var(--fgColor-muted, #9198a1);
+}
+
+.github-chat-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--fgColor-muted, #9198a1);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.github-chat-close:hover {
+  background: var(--bgColor-neutral-muted, rgba(110, 118, 129, 0.4));
+  color: var(--fgColor-default, #f0f6fc);
+}
+
+.github-chat-close svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+/* Messages Container */
+.github-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.github-chat-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--fgColor-muted, #9198a1);
+  font-size: 14px;
+  text-align: center;
+  padding: 20px;
+  gap: 8px;
+}
+
+.github-chat-empty p {
+  margin: 0;
+}
+
+.github-chat-empty-hint {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* Message Bubble */
+.github-chat-message {
+  max-width: 80%;
+  display: flex;
+  flex-direction: column;
+}
+
+.github-chat-message.sent {
+  align-self: flex-end;
+}
+
+.github-chat-message.received {
+  align-self: flex-start;
+}
+
+.github-chat-bubble {
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.github-chat-message.sent .github-chat-bubble {
+  background: var(--bgColor-accent-emphasis, #1f6feb);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.github-chat-message.received .github-chat-bubble {
+  background: var(--bgColor-muted, #161b22);
+  color: var(--fgColor-default, #f0f6fc);
+  border: 1px solid var(--borderColor-default, #3d444d);
+  border-bottom-left-radius: 4px;
+}
+
+.github-chat-time {
+  font-size: 10px;
+  color: var(--fgColor-muted, #9198a1);
+  margin-top: 4px;
+  padding: 0 4px;
+}
+
+.github-chat-message.sent .github-chat-time {
+  text-align: right;
+}
+
+/* Input Area */
+.github-chat-input-area {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid var(--borderColor-default, #3d444d);
+  background: var(--bgColor-muted, #161b22);
+}
+
+.github-chat-input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--borderColor-default, #3d444d);
+  background: var(--bgColor-default, #0d1117);
+  color: var(--fgColor-default, #f0f6fc);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  resize: none;
+  min-height: 40px;
+  max-height: 120px;
+  transition: border-color 0.2s ease;
+}
+
+.github-chat-input::placeholder {
+  color: var(--fgColor-muted, #9198a1);
+}
+
+.github-chat-input:focus {
+  border-color: var(--borderColor-accent-emphasis, #1f6feb);
+}
+
+.github-chat-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bgColor-accent-emphasis, #1f6feb);
+  color: #fff;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    transform 0.1s ease;
+  flex-shrink: 0;
+}
+
+.github-chat-send:hover {
+  background: var(--bgColor-accent-muted, #388bfd);
+}
+
+.github-chat-send:active {
+  transform: scale(0.95);
+}
+
+.github-chat-send svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* Chat List */
+.github-chat-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.github-chat-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  border-bottom: 1px solid var(--borderColor-muted, #21262d);
+}
+
+.github-chat-list-item:hover {
+  background: var(--bgColor-muted, #161b22);
+}
+
+.github-chat-list-item:active {
+  background: var(--bgColor-neutral-muted, rgba(110, 118, 129, 0.4));
+}
+
+.github-chat-list-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.github-chat-list-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.github-chat-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.github-chat-list-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fgColor-default, #f0f6fc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.github-chat-list-time {
+  font-size: 12px;
+  color: var(--fgColor-muted, #9198a1);
+  flex-shrink: 0;
+}
+
+.github-chat-list-preview {
+  font-size: 13px;
+  color: var(--fgColor-muted, #9198a1);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Avatar wrapper for badge positioning */
+.github-chat-list-avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* Not on platform badge (for chat list) */
+.github-chat-not-on-platform-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  background: #f0883e;
+  border: 2px solid var(--bgColor-default, #0d1117);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Not on platform indicator (for chat header) */
+.github-chat-not-on-platform {
+  display: inline-block;
+  font-size: 11px;
+  color: #f0883e;
+  background: rgba(240, 136, 62, 0.15);
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-top: 4px;
+}
+
+/* Loading state */
+.github-chat-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--fgColor-muted, #9198a1);
+  font-size: 14px;
+}
+
+/* Error state */
+.github-chat-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 24px;
+  color: #f85149;
+}
+
+.github-chat-error p {
+  margin: 0;
+}
+
+/* Message status icons */
+.github-chat-status {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.github-chat-status svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Pending - clock icon */
+.github-chat-status.pending svg {
+  fill: var(--fgColor-muted, #9198a1);
+  opacity: 0.7;
+}
+
+/* Sent - single checkmark (outline) */
+.github-chat-status.sent svg {
+  fill: var(--fgColor-muted, #9198a1);
+}
+
+/* Read - filled double checkmark */
+.github-chat-status.read svg {
+  fill: var(--bgColor-accent-emphasis, #1f6feb);
+}
+
+/* Failed - red X */
+.github-chat-status.failed svg {
+  fill: #f85149;
+}
+
+/* Message meta line */
+.github-chat-meta {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
+  padding: 0 4px;
+}
+
+.github-chat-message.sent .github-chat-meta {
+  justify-content: flex-end;
+}
+
+.github-chat-message.received .github-chat-meta {
+  justify-content: flex-start;
+}
+
+/* Typing indicator */
+.github-chat-typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  color: var(--fgColor-muted, #9198a1);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.github-chat-typing-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.github-chat-typing-dots span {
+  width: 6px;
+  height: 6px;
+  background: var(--fgColor-muted, #9198a1);
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out both;
+}
+
+.github-chat-typing-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.github-chat-typing-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.github-chat-typing-dots span:nth-child(3) {
+  animation-delay: 0s;
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
