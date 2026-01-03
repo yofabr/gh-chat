@@ -1,10 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { usePostHog } from "posthog-js/react";
 
 export const Route = createFileRoute("/")({
   component: LandingPage,
 });
 
 function LandingPage() {
+  const posthog = usePostHog();
+
+  const handleInstallClick = () => {
+    posthog.capture("extension_install_clicked");
+  };
+
   return (
     <div className="min-h-screen bg-[#0d1117] text-white">
       <div className="flex flex-col items-center justify-center min-h-screen px-6">
@@ -21,6 +28,7 @@ function LandingPage() {
 
         <a
           href="#"
+          onClick={handleInstallClick}
           className="inline-flex items-center gap-2 px-8 py-3 bg-[#238636] hover:bg-[#2ea043] text-white font-semibold rounded-2xl transition-colors text-lg"
         >
           <svg
