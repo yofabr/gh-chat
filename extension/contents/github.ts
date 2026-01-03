@@ -7,6 +7,9 @@ import {
   getMessages,
   getOrCreateConversation,
   joinConversation,
+  markMessagesAsRead,
+  sendStopTyping,
+  sendTypingIndicator,
   type Message as ApiMessage,
   type Conversation,
   type OtherUser
@@ -25,6 +28,16 @@ let chatListDrawer: HTMLElement | null = null
 let currentConversationId: number | null = null
 let currentUserId: number | null = null
 let wsCleanup: (() => void) | null = null
+let pendingMessageId = 0 // For tracking optimistic messages
+let typingTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Status icons
+const STATUS_ICONS = {
+  pending: `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7-3.25v2.992l2.028.812a.75.75 0 0 1-.557 1.392l-2.5-1A.751.751 0 0 1 7 8.25v-3.5a.75.75 0 0 1 1.5 0Z"/></svg>`,
+  sent: `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>`,
+  read: `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.042-1.042L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/><path fill="currentColor" d="M10.28 4.22a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" transform="translate(3, 0)"/></svg>`,
+  failed: `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L9.06 8l3.22 3.22a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>`
+}
 
 interface ChatPreview {
   username: string
@@ -151,6 +164,15 @@ async function getAllChats(): Promise<ChatPreview[]> {
 
 // Close chat drawer
 function closeChatDrawer(): void {
+  // Clean up typing timeout
+  if (typingTimeout) {
+    clearTimeout(typingTimeout)
+    typingTimeout = null
+  }
+
+  // Stop typing indicator before closing
+  sendStopTyping()
+
   // Clean up WebSocket connection
   if (wsCleanup) {
     wsCleanup()
@@ -394,6 +416,9 @@ async function openChatDrawer(
   const messages = await getMessages(conversation.id)
   const messagesContainer = chatDrawer.querySelector("#github-chat-messages")
 
+  // Track unread message IDs (received messages that haven't been read)
+  const unreadMessageIds: number[] = []
+
   if (messagesContainer) {
     if (messages.length === 0) {
       messagesContainer.innerHTML = `
@@ -407,15 +432,38 @@ async function openChatDrawer(
       // Use otherUserId to determine if message is sent or received
       // If sender_id matches otherUser, it's received; otherwise it's sent by us
       messagesContainer.innerHTML = messages
-        .map(
-          (msg: ApiMessage) => `
-          <div class="github-chat-message ${msg.sender_id === otherUserId ? "received" : "sent"}">
-            <div class="github-chat-bubble">${escapeHtml(msg.content)}</div>
-            <span class="github-chat-time">${formatTime(new Date(msg.created_at).getTime())}</span>
-          </div>
-        `
-        )
+        .map((msg: ApiMessage) => {
+          const isReceived = msg.sender_id === otherUserId
+          const isSent = !isReceived
+
+          // Collect unread received messages
+          if (isReceived && !msg.read_at) {
+            unreadMessageIds.push(msg.id)
+          }
+
+          // Determine status for sent messages
+          let statusIcon = ""
+          if (isSent) {
+            const statusClass = msg.read_at ? "read" : "sent"
+            statusIcon = `<span class="github-chat-status ${statusClass}">${msg.read_at ? STATUS_ICONS.read : STATUS_ICONS.sent}</span>`
+          }
+
+          return `
+            <div class="github-chat-message ${isReceived ? "received" : "sent"}" data-message-id="${msg.id}">
+              <div class="github-chat-bubble">${escapeHtml(msg.content)}</div>
+              <div class="github-chat-meta">
+                <span class="github-chat-time">${formatTime(new Date(msg.created_at).getTime())}</span>
+                ${statusIcon}
+              </div>
+            </div>
+          `
+        })
         .join("")
+
+      // Mark unread messages as read
+      if (unreadMessageIds.length > 0) {
+        markMessagesAsRead(unreadMessageIds)
+      }
     }
     messagesContainer.scrollTo(0, messagesContainer.scrollHeight)
   }
@@ -431,10 +479,19 @@ async function openChatDrawer(
   if (input) input.disabled = false
   if (sendBtn) sendBtn.disabled = false
 
-  // Auto-resize textarea
+  // Auto-resize textarea and send typing indicator
   input?.addEventListener("input", () => {
     input.style.height = "auto"
     input.style.height = Math.min(input.scrollHeight, 120) + "px"
+
+    // Send typing indicator
+    sendTypingIndicator()
+
+    // Clear existing timeout and set new one
+    if (typingTimeout) clearTimeout(typingTimeout)
+    typingTimeout = setTimeout(() => {
+      sendStopTyping()
+    }, 2000)
   })
 
   // Send message on Enter (without Shift)
@@ -451,48 +508,102 @@ async function openChatDrawer(
     const text = input?.value.trim()
     if (!text || !currentConversationId) return
 
-    // Disable input while sending
-    if (input) input.disabled = true
-    if (sendBtn) sendBtn.disabled = true
-
-    const sentMessage = await apiSendMessage(currentConversationId, text)
-
-    // Re-enable input
-    if (input) input.disabled = false
-    if (sendBtn) sendBtn.disabled = false
-
-    if (!sentMessage) {
-      // Show error briefly
-      return
+    // Stop typing indicator
+    if (typingTimeout) {
+      clearTimeout(typingTimeout)
+      typingTimeout = null
     }
+    sendStopTyping()
 
-    // Add message to UI
+    // Generate a temporary ID for the optimistic message
+    const tempId = `pending-${++pendingMessageId}`
+
+    // Clear input immediately for better UX
+    const messageText = text
+    input.value = ""
+    input.style.height = "auto"
+    input?.focus()
+
+    // Add message to UI immediately with pending status (optimistic update)
     const emptyState = messagesContainer?.querySelector(".github-chat-empty")
     if (emptyState) emptyState.remove()
 
     const messageEl = document.createElement("div")
     messageEl.className = "github-chat-message sent"
+    messageEl.id = tempId
     messageEl.innerHTML = `
-      <div class="github-chat-bubble">${escapeHtml(sentMessage.content)}</div>
-      <span class="github-chat-time">${formatTime(new Date(sentMessage.created_at).getTime())}</span>
+      <div class="github-chat-bubble">${escapeHtml(messageText)}</div>
+      <div class="github-chat-meta">
+        <span class="github-chat-time">${formatTime(Date.now())}</span>
+        <span class="github-chat-status pending">${STATUS_ICONS.pending}</span>
+      </div>
     `
     messagesContainer?.appendChild(messageEl)
     messagesContainer?.scrollTo(0, messagesContainer.scrollHeight)
 
-    // Clear input
-    input.value = ""
-    input.style.height = "auto"
-    input?.focus()
+    // Send to server
+    const sentMessage = await apiSendMessage(currentConversationId, messageText)
+
+    // Update the optimistic message with the result
+    const pendingEl = document.getElementById(tempId)
+    if (pendingEl) {
+      if (sentMessage) {
+        // Success - update to sent status
+        pendingEl.setAttribute("data-message-id", sentMessage.id.toString())
+        pendingEl.removeAttribute("id")
+        const statusEl = pendingEl.querySelector(".github-chat-status")
+        if (statusEl) {
+          statusEl.className = "github-chat-status sent"
+          statusEl.innerHTML = STATUS_ICONS.sent
+        }
+      } else {
+        // Failed - show error status
+        const statusEl = pendingEl.querySelector(".github-chat-status")
+        if (statusEl) {
+          statusEl.className = "github-chat-status failed"
+          statusEl.innerHTML = STATUS_ICONS.failed
+        }
+      }
+    }
+  }
+
+  // Helper to show/hide typing indicator
+  let typingIndicatorEl: HTMLElement | null = null
+
+  function showTypingIndicator(username: string) {
+    if (typingIndicatorEl) return // Already showing
+
+    typingIndicatorEl = document.createElement("div")
+    typingIndicatorEl.className = "github-chat-typing-indicator"
+    typingIndicatorEl.innerHTML = `
+      <div class="github-chat-typing-dots">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <span>${escapeHtml(username)} is typing...</span>
+    `
+    messagesContainer?.appendChild(typingIndicatorEl)
+    messagesContainer?.scrollTo(0, messagesContainer.scrollHeight)
+  }
+
+  function hideTypingIndicator() {
+    if (typingIndicatorEl) {
+      typingIndicatorEl.remove()
+      typingIndicatorEl = null
+    }
   }
 
   // Subscribe to real-time messages via WebSocket
   try {
-    wsCleanup = await joinConversation(
-      conversation.id,
-      (newMessage: ApiMessage) => {
+    wsCleanup = await joinConversation(conversation.id, {
+      onMessage: (newMessage: ApiMessage) => {
         // If message is from the other user, it's a received message
         // If it's from us (not the other user), skip as it's already added locally
         if (newMessage.sender_id !== otherUserId) return
+
+        // Hide typing indicator when message arrives
+        hideTypingIndicator()
 
         const emptyState =
           messagesContainer?.querySelector(".github-chat-empty")
@@ -500,14 +611,44 @@ async function openChatDrawer(
 
         const messageEl = document.createElement("div")
         messageEl.className = "github-chat-message received"
+        messageEl.setAttribute("data-message-id", newMessage.id.toString())
         messageEl.innerHTML = `
           <div class="github-chat-bubble">${escapeHtml(newMessage.content)}</div>
-          <span class="github-chat-time">${formatTime(new Date(newMessage.created_at).getTime())}</span>
+          <div class="github-chat-meta">
+            <span class="github-chat-time">${formatTime(new Date(newMessage.created_at).getTime())}</span>
+          </div>
         `
         messagesContainer?.appendChild(messageEl)
         messagesContainer?.scrollTo(0, messagesContainer.scrollHeight)
+
+        // Mark as read immediately since drawer is open
+        markMessagesAsRead([newMessage.id])
+      },
+
+      onTyping: (_userId: number, username: string) => {
+        showTypingIndicator(username)
+      },
+
+      onStopTyping: (_userId: number) => {
+        hideTypingIndicator()
+      },
+
+      onMessagesRead: (messageIds: number[]) => {
+        // Update sent messages to show read status
+        messageIds.forEach((id) => {
+          const msgEl = messagesContainer?.querySelector(
+            `[data-message-id="${id}"]`
+          )
+          if (msgEl && msgEl.classList.contains("sent")) {
+            const statusEl = msgEl.querySelector(".github-chat-status")
+            if (statusEl) {
+              statusEl.className = "github-chat-status read"
+              statusEl.innerHTML = STATUS_ICONS.read
+            }
+          }
+        })
       }
-    )
+    })
   } catch (error) {
     console.error("WebSocket error:", error)
   }

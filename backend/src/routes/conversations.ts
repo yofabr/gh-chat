@@ -242,7 +242,7 @@ conversations.get("/:id/messages", async (c) => {
   let messages;
   if (before) {
     messages = await sql`
-      SELECT m.id, m.content, m.created_at, m.sender_id,
+      SELECT m.id, m.content, m.created_at, m.read_at, m.sender_id,
              u.username as sender_username, u.display_name as sender_display_name, u.avatar_url as sender_avatar
       FROM messages m
       JOIN users u ON m.sender_id = u.id
@@ -252,7 +252,7 @@ conversations.get("/:id/messages", async (c) => {
     `;
   } else {
     messages = await sql`
-      SELECT m.id, m.content, m.created_at, m.sender_id,
+      SELECT m.id, m.content, m.created_at, m.read_at, m.sender_id,
              u.username as sender_username, u.display_name as sender_display_name, u.avatar_url as sender_avatar
       FROM messages m
       JOIN users u ON m.sender_id = u.id

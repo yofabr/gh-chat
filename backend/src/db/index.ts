@@ -71,8 +71,20 @@ export async function initDb() {
       conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
       sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
       content TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP DEFAULT NOW(),
+      read_at TIMESTAMP
     )
+  `;
+
+  // Add read_at column if it doesn't exist (for existing databases)
+  await sql`
+    DO $$ 
+    BEGIN 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                     WHERE table_name='messages' AND column_name='read_at') THEN
+        ALTER TABLE messages ADD COLUMN read_at TIMESTAMP;
+      END IF;
+    END $$;
   `;
 
   // Create indexes for better query performance

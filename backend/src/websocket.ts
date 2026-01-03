@@ -186,8 +186,105 @@ export function createWebSocketServer(port: number) {
 
         // Leave conversation
         if (message.type === "leave") {
+          // Clear typing timeout when leaving
+          const typingKey = `${ws.conversationId}:${ws.userId}`;
+          if (typingTimeouts.has(typingKey)) {
+            clearTimeout(typingTimeouts.get(typingKey)!);
+            typingTimeouts.delete(typingKey);
+          }
           removeSocketFromConversation(ws);
           ws.send(JSON.stringify({ type: "left" }));
+          return;
+        }
+
+        // Typing indicator
+        if (message.type === "typing") {
+          if (!ws.conversationId) return;
+
+          const typingKey = `${ws.conversationId}:${ws.userId}`;
+
+          // Clear existing timeout
+          if (typingTimeouts.has(typingKey)) {
+            clearTimeout(typingTimeouts.get(typingKey)!);
+          }
+
+          // Broadcast typing to others in conversation
+          broadcastToConversation(
+            ws.conversationId,
+            {
+              type: "typing",
+              userId: ws.userId,
+              username: ws.username,
+            },
+            ws.userId,
+          );
+
+          // Set timeout to clear typing after 3 seconds
+          typingTimeouts.set(
+            typingKey,
+            setTimeout(() => {
+              broadcastToConversation(
+                ws.conversationId!,
+                {
+                  type: "stop_typing",
+                  userId: ws.userId,
+                },
+                ws.userId,
+              );
+              typingTimeouts.delete(typingKey);
+            }, 3000),
+          );
+          return;
+        }
+
+        // Stop typing
+        if (message.type === "stop_typing") {
+          if (!ws.conversationId) return;
+
+          const typingKey = `${ws.conversationId}:${ws.userId}`;
+          if (typingTimeouts.has(typingKey)) {
+            clearTimeout(typingTimeouts.get(typingKey)!);
+            typingTimeouts.delete(typingKey);
+          }
+
+          broadcastToConversation(
+            ws.conversationId,
+            {
+              type: "stop_typing",
+              userId: ws.userId,
+            },
+            ws.userId,
+          );
+          return;
+        }
+
+        // Mark messages as read
+        if (message.type === "mark_read") {
+          if (!ws.conversationId) return;
+
+          const messageIds = message.messageIds as number[];
+          if (!Array.isArray(messageIds) || messageIds.length === 0) return;
+
+          // Update messages as read in database
+          await sql`
+            UPDATE messages 
+            SET read_at = NOW() 
+            WHERE id = ANY(${messageIds}) 
+            AND conversation_id = ${ws.conversationId}
+            AND sender_id != ${ws.userId}
+            AND read_at IS NULL
+          `;
+
+          // Broadcast read receipt to sender
+          broadcastToConversation(
+            ws.conversationId,
+            {
+              type: "messages_read",
+              messageIds,
+              readBy: ws.userId,
+            },
+            ws.userId,
+          );
           return;
         }
       } catch (error) {
@@ -197,6 +294,20 @@ export function createWebSocketServer(port: number) {
     });
 
     ws.on("close", () => {
+      // Clear typing timeout on disconnect
+      if (ws.conversationId && ws.userId) {
+        const typingKey = `${ws.conversationId}:${ws.userId}`;
+        if (typingTimeouts.has(typingKey)) {
+          clearTimeout(typingTimeouts.get(typingKey)!);
+          typingTimeouts.delete(typingKey);
+          // Notify others that user stopped typing
+          broadcastToConversation(
+            ws.conversationId,
+            { type: "stop_typing", userId: ws.userId },
+            ws.userId,
+          );
+        }
+      }
       removeSocketFromConversation(ws);
     });
 

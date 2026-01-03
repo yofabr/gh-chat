@@ -80,6 +80,7 @@ export interface Message {
   id: number
   content: string
   created_at: string
+  read_at: string | null
   sender_id: number
   sender_username: string
   sender_display_name: string
@@ -180,6 +181,9 @@ let wsReconnectTimeout: ReturnType<typeof setTimeout> | null = null
 let wsAuthenticated = false
 let currentConversationId: number | null = null
 let messageCallback: ((message: Message) => void) | null = null
+let typingCallback: ((userId: number, username: string) => void) | null = null
+let stopTypingCallback: ((userId: number) => void) | null = null
+let messagesReadCallback: ((messageIds: number[]) => void) | null = null
 
 function connectWebSocket(token: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -218,6 +222,18 @@ function connectWebSocket(token: string): Promise<void> {
         if (data.type === "new_message" && data.message && messageCallback) {
           messageCallback(data.message)
         }
+
+        if (data.type === "typing" && typingCallback) {
+          typingCallback(data.userId, data.username)
+        }
+
+        if (data.type === "stop_typing" && stopTypingCallback) {
+          stopTypingCallback(data.userId)
+        }
+
+        if (data.type === "messages_read" && messagesReadCallback) {
+          messagesReadCallback(data.messageIds)
+        }
       } catch (e) {
         console.error("WebSocket message parse error:", e)
       }
@@ -244,17 +260,27 @@ function connectWebSocket(token: string): Promise<void> {
   })
 }
 
+export interface ConversationCallbacks {
+  onMessage: (message: Message) => void
+  onTyping?: (userId: number, username: string) => void
+  onStopTyping?: (userId: number) => void
+  onMessagesRead?: (messageIds: number[]) => void
+}
+
 // Join a conversation for real-time updates
 export async function joinConversation(
   conversationId: number,
-  onMessage: (message: Message) => void
+  callbacks: ConversationCallbacks
 ): Promise<() => void> {
   const token = await getToken()
   if (!token) {
     throw new Error("Not authenticated")
   }
 
-  messageCallback = onMessage
+  messageCallback = callbacks.onMessage
+  typingCallback = callbacks.onTyping || null
+  stopTypingCallback = callbacks.onStopTyping || null
+  messagesReadCallback = callbacks.onMessagesRead || null
   currentConversationId = conversationId
 
   // Connect if not connected
@@ -271,7 +297,31 @@ export async function joinConversation(
       ws.send(JSON.stringify({ type: "leave" }))
     }
     messageCallback = null
+    typingCallback = null
+    stopTypingCallback = null
+    messagesReadCallback = null
     currentConversationId = null
+  }
+}
+
+// Send typing indicator
+export function sendTypingIndicator() {
+  if (ws && ws.readyState === WebSocket.OPEN && currentConversationId) {
+    ws.send(JSON.stringify({ type: "typing" }))
+  }
+}
+
+// Stop typing indicator
+export function sendStopTyping() {
+  if (ws && ws.readyState === WebSocket.OPEN && currentConversationId) {
+    ws.send(JSON.stringify({ type: "stop_typing" }))
+  }
+}
+
+// Mark messages as read
+export function markMessagesAsRead(messageIds: number[]) {
+  if (ws && ws.readyState === WebSocket.OPEN && currentConversationId) {
+    ws.send(JSON.stringify({ type: "mark_read", messageIds }))
   }
 }
 
@@ -287,5 +337,8 @@ export function disconnectWebSocket() {
   }
   wsAuthenticated = false
   messageCallback = null
+  typingCallback = null
+  stopTypingCallback = null
+  messagesReadCallback = null
   currentConversationId = null
 }
