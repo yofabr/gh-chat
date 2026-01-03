@@ -12,8 +12,46 @@ interface AuthenticatedSocket extends WebSocket {
 // Map of conversation ID to set of connected sockets
 const conversationSockets = new Map<number, Set<AuthenticatedSocket>>();
 
+// Map of user ID to set of all their connected sockets (for global notifications like read receipts)
+const userSockets = new Map<number, Set<AuthenticatedSocket>>();
+
 // Track typing timeouts per user per conversation
 const typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+
+// Add socket to user's global socket set
+function addUserSocket(socket: AuthenticatedSocket) {
+  if (!socket.userId) return;
+  if (!userSockets.has(socket.userId)) {
+    userSockets.set(socket.userId, new Set());
+  }
+  userSockets.get(socket.userId)!.add(socket);
+}
+
+// Remove socket from user's global socket set
+function removeUserSocket(socket: AuthenticatedSocket) {
+  if (!socket.userId) return;
+  const sockets = userSockets.get(socket.userId);
+  if (sockets) {
+    sockets.delete(socket);
+    if (sockets.size === 0) {
+      userSockets.delete(socket.userId);
+    }
+  }
+}
+
+// Broadcast to a specific user (all their sockets, regardless of which conversation they're in)
+export function broadcastToUser(userId: number, message: any) {
+  const sockets = userSockets.get(userId);
+  if (!sockets) return;
+
+  const messageStr = JSON.stringify(message);
+
+  sockets.forEach((socket) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(messageStr);
+    }
+  });
+}
 
 // Verify token and get user info
 async function verifyToken(
@@ -101,6 +139,7 @@ export function createWebSocketServer(port: number) {
       const socket = ws as AuthenticatedSocket;
       if (socket.isAlive === false) {
         removeSocketFromConversation(socket);
+        removeUserSocket(socket);
         return socket.terminate();
       }
       socket.isAlive = false;
@@ -133,6 +172,8 @@ export function createWebSocketServer(port: number) {
           }
           ws.userId = user.userId;
           ws.username = user.username;
+          // Register this socket globally for the user
+          addUserSocket(ws);
           ws.send(
             JSON.stringify({ type: "authenticated", userId: user.userId }),
           );
@@ -265,26 +306,37 @@ export function createWebSocketServer(port: number) {
           const messageIds = message.messageIds as number[];
           if (!Array.isArray(messageIds) || messageIds.length === 0) return;
 
-          // Update messages as read in database
-          await sql`
+          // Update messages as read in database and get the sender IDs
+          const updatedMessages = await sql`
             UPDATE messages 
             SET read_at = NOW() 
             WHERE id = ANY(${messageIds}) 
             AND conversation_id = ${ws.conversationId}
             AND sender_id != ${ws.userId}
             AND read_at IS NULL
+            RETURNING id, sender_id
           `;
 
-          // Broadcast read receipt to sender
-          broadcastToConversation(
-            ws.conversationId,
-            {
+          if (updatedMessages.length === 0) return;
+
+          // Group message IDs by sender
+          const messagesBySender = new Map<number, number[]>();
+          for (const msg of updatedMessages) {
+            if (!messagesBySender.has(msg.sender_id)) {
+              messagesBySender.set(msg.sender_id, []);
+            }
+            messagesBySender.get(msg.sender_id)!.push(msg.id);
+          }
+
+          // Notify each sender about their messages being read (globally, not just in conversation)
+          for (const [senderId, msgIds] of messagesBySender) {
+            broadcastToUser(senderId, {
               type: "messages_read",
-              messageIds,
+              conversationId: ws.conversationId,
+              messageIds: msgIds,
               readBy: ws.userId,
-            },
-            ws.userId,
-          );
+            });
+          }
           return;
         }
       } catch (error) {
@@ -309,11 +361,13 @@ export function createWebSocketServer(port: number) {
         }
       }
       removeSocketFromConversation(ws);
+      removeUserSocket(ws);
     });
 
     ws.on("error", (error) => {
       console.error("WebSocket error:", error);
       removeSocketFromConversation(ws);
+      removeUserSocket(ws);
     });
   });
 

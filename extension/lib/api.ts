@@ -232,7 +232,13 @@ function connectWebSocket(token: string): Promise<void> {
         }
 
         if (data.type === "messages_read" && messagesReadCallback) {
-          messagesReadCallback(data.messageIds)
+          // Only call callback if it's for the current conversation
+          if (
+            !data.conversationId ||
+            data.conversationId === currentConversationId
+          ) {
+            messagesReadCallback(data.messageIds)
+          }
         }
       } catch (e) {
         console.error("WebSocket message parse error:", e)
