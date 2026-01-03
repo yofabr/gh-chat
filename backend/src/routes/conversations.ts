@@ -262,6 +262,12 @@ conversations.get("/:id/messages", async (c) => {
     `;
   }
 
+  // Debug: log messages with read_at status
+  console.log(
+    "Fetched messages:",
+    messages.map((m: any) => ({ id: m.id, read_at: m.read_at })),
+  );
+
   // Reverse to get chronological order
   return c.json({ messages: messages.reverse() });
 });

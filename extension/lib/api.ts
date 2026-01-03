@@ -5,6 +5,53 @@ const BACKEND_URL =
 const FRONTEND_URL =
   process.env.PLASMO_PUBLIC_FRONTEND_URL || "http://localhost:5173"
 
+// Status icons for messages (duplicated here for direct DOM updates)
+const STATUS_ICONS = {
+  sent: `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>`,
+  read: `<svg viewBox="0 0 24 16" width="18" height="12"><path fill="currentColor" d="M11.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L4 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/><path fill="currentColor" d="M19.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0l-1.5-1.5a.751.751 0 0 1 1.06-1.06l.97.97 6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>`
+}
+
+// Update message status directly in the DOM (for read receipts when chat is open)
+function updateMessageStatusInDOM(
+  messageIds: number[],
+  status: "sent" | "read"
+) {
+  console.log(
+    `updateMessageStatusInDOM called with ids:`,
+    messageIds,
+    `status:`,
+    status
+  )
+  // Find the chat drawer (not the list drawer)
+  const chatDrawer = document.querySelector(
+    ".github-chat-drawer:not(.github-chat-list-drawer)"
+  )
+  console.log("Chat drawer found:", !!chatDrawer)
+  if (!chatDrawer) return // Chat drawer not open
+
+  const messagesContainer = chatDrawer.querySelector(".github-chat-messages")
+  console.log("Messages container found:", !!messagesContainer)
+  if (!messagesContainer) return
+
+  messageIds.forEach((id) => {
+    const msgEl = messagesContainer.querySelector(`[data-message-id="${id}"]`)
+    console.log(
+      `Message element for ${id}:`,
+      !!msgEl,
+      msgEl?.classList.contains("sent")
+    )
+    if (msgEl && msgEl.classList.contains("sent")) {
+      const statusEl = msgEl.querySelector(".github-chat-status")
+      console.log(`Status element for ${id}:`, !!statusEl)
+      if (statusEl) {
+        statusEl.className = `github-chat-status ${status}`
+        statusEl.innerHTML = STATUS_ICONS[status]
+        console.log(`Updated message ${id} status to ${status} via DOM`)
+      }
+    }
+  })
+}
+
 // API client with auth header
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   const token = await getToken()
@@ -203,6 +250,7 @@ function connectWebSocket(token: string): Promise<void> {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
+        console.log("WebSocket received:", data.type, data)
 
         if (data.type === "authenticated") {
           wsAuthenticated = true
@@ -231,13 +279,29 @@ function connectWebSocket(token: string): Promise<void> {
           stopTypingCallback(data.userId)
         }
 
-        if (data.type === "messages_read" && messagesReadCallback) {
-          // Only call callback if it's for the current conversation
-          if (
-            !data.conversationId ||
-            data.conversationId === currentConversationId
-          ) {
-            messagesReadCallback(data.messageIds)
+        if (data.type === "messages_read") {
+          console.log("Received messages_read:", data)
+          console.log("messagesReadCallback exists:", !!messagesReadCallback)
+          console.log("Current conversation:", currentConversationId)
+
+          // Always try to update the DOM directly for read receipts
+          // This handles the case where the chat is open but callbacks aren't set
+          const messageIds = data.messageIds as number[]
+          if (messageIds && messageIds.length > 0) {
+            updateMessageStatusInDOM(messageIds, "read")
+          }
+
+          // Also call the callback if it exists and conversation matches
+          if (messagesReadCallback) {
+            if (
+              !data.conversationId ||
+              data.conversationId === currentConversationId
+            ) {
+              console.log("Calling messagesReadCallback with:", data.messageIds)
+              messagesReadCallback(data.messageIds)
+            } else {
+              console.log("Ignoring callback - different conversation")
+            }
           }
         }
       } catch (e) {
@@ -294,20 +358,42 @@ export async function joinConversation(
     await connectWebSocket(token)
   }
 
-  // Join the conversation
-  ws?.send(JSON.stringify({ type: "join", conversationId }))
+  // Join the conversation and wait for confirmation
+  return new Promise((resolve) => {
+    const originalOnMessage = ws!.onmessage
 
-  // Return cleanup function
-  return () => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "leave" }))
+    ws!.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.type === "joined" && data.conversationId === conversationId) {
+          console.log("Joined conversation:", conversationId)
+          // Restore original handler and resolve
+          ws!.onmessage = originalOnMessage
+
+          // Return cleanup function
+          resolve(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "leave" }))
+            }
+            messageCallback = null
+            typingCallback = null
+            stopTypingCallback = null
+            messagesReadCallback = null
+            currentConversationId = null
+          })
+          return
+        }
+      } catch (e) {
+        // ignore
+      }
+      // Pass through to original handler
+      if (originalOnMessage) {
+        originalOnMessage.call(ws, event)
+      }
     }
-    messageCallback = null
-    typingCallback = null
-    stopTypingCallback = null
-    messagesReadCallback = null
-    currentConversationId = null
-  }
+
+    ws?.send(JSON.stringify({ type: "join", conversationId }))
+  })
 }
 
 // Send typing indicator
@@ -326,8 +412,36 @@ export function sendStopTyping() {
 
 // Mark messages as read
 export function markMessagesAsRead(messageIds: number[]) {
+  console.log("markMessagesAsRead called:", messageIds)
+  console.log(
+    "ws exists:",
+    !!ws,
+    "readyState:",
+    ws?.readyState,
+    "currentConversationId:",
+    currentConversationId
+  )
   if (ws && ws.readyState === WebSocket.OPEN && currentConversationId) {
+    console.log("Sending mark_read via WebSocket")
     ws.send(JSON.stringify({ type: "mark_read", messageIds }))
+  } else {
+    console.log("NOT sending mark_read - conditions not met")
+  }
+}
+
+// Ensure WebSocket is connected for global events (read receipts, etc.)
+export async function ensureWebSocketConnected(): Promise<void> {
+  console.log("ensureWebSocketConnected called")
+  const token = await getToken()
+  console.log("Token available:", !!token)
+  if (!token) return
+
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.log("Connecting WebSocket...")
+    await connectWebSocket(token)
+    console.log("WebSocket connected and authenticated")
+  } else {
+    console.log("WebSocket already connected")
   }
 }
 

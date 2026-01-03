@@ -3,6 +3,7 @@ import type { PlasmoCSConfig } from "plasmo"
 import {
   sendMessage as apiSendMessage,
   disconnectWebSocket,
+  ensureWebSocketConnected,
   getConversations,
   getMessages,
   getOrCreateConversation,
@@ -35,7 +36,7 @@ let typingTimeout: ReturnType<typeof setTimeout> | null = null
 const STATUS_ICONS = {
   pending: `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7-3.25v2.992l2.028.812a.75.75 0 0 1-.557 1.392l-2.5-1A.751.751 0 0 1 7 8.25v-3.5a.75.75 0 0 1 1.5 0Z"/></svg>`,
   sent: `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>`,
-  read: `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.042-1.042L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/><path fill="currentColor" d="M10.28 4.22a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" transform="translate(3, 0)"/></svg>`,
+  read: `<svg viewBox="0 0 24 16" width="18" height="12"><path fill="currentColor" d="M11.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L4 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/><path fill="currentColor" d="M19.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0l-1.5-1.5a.751.751 0 0 1 1.06-1.06l.97.97 6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>`,
   failed: `<svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L9.06 8l3.22 3.22a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>`
 }
 
@@ -460,10 +461,7 @@ async function openChatDrawer(
         })
         .join("")
 
-      // Mark unread messages as read
-      if (unreadMessageIds.length > 0) {
-        markMessagesAsRead(unreadMessageIds)
-      }
+      // Note: unreadMessageIds will be marked as read AFTER joinConversation below
     }
     messagesContainer.scrollTo(0, messagesContainer.scrollHeight)
   }
@@ -634,21 +632,36 @@ async function openChatDrawer(
       },
 
       onMessagesRead: (messageIds: number[]) => {
+        console.log("onMessagesRead callback - updating UI for:", messageIds)
         // Update sent messages to show read status
         messageIds.forEach((id) => {
           const msgEl = messagesContainer?.querySelector(
             `[data-message-id="${id}"]`
           )
+          console.log(
+            `Looking for message ${id}:`,
+            msgEl,
+            "isSent:",
+            msgEl?.classList.contains("sent")
+          )
           if (msgEl && msgEl.classList.contains("sent")) {
             const statusEl = msgEl.querySelector(".github-chat-status")
+            console.log("Status element found:", statusEl)
             if (statusEl) {
               statusEl.className = "github-chat-status read"
               statusEl.innerHTML = STATUS_ICONS.read
+              console.log("Updated status to read")
             }
           }
         })
       }
     })
+
+    // Now that we're joined, mark any unread messages as read
+    if (unreadMessageIds.length > 0) {
+      console.log("Marking unread messages as read:", unreadMessageIds)
+      markMessagesAsRead(unreadMessageIds)
+    }
   } catch (error) {
     console.error("WebSocket error:", error)
   }
@@ -831,10 +844,14 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
     initHeaderButton()
     initProfilePage()
+    // Connect WebSocket early to receive read receipts even when chat is closed
+    ensureWebSocketConnected().catch(console.error)
   })
 } else {
   initHeaderButton()
   initProfilePage()
+  // Connect WebSocket early to receive read receipts even when chat is closed
+  ensureWebSocketConnected().catch(console.error)
 }
 
 // Re-run on navigation (GitHub uses SPA-style navigation)

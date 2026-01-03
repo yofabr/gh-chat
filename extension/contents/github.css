@@ -467,24 +467,24 @@
 }
 
 /* Pending - clock icon */
-.github-chat-status.pending svg {
-  fill: var(--fgColor-muted, #9198a1);
+.github-chat-status.pending {
+  color: var(--fgColor-muted, #9198a1);
   opacity: 0.7;
 }
 
 /* Sent - single checkmark (outline) */
-.github-chat-status.sent svg {
-  fill: var(--fgColor-muted, #9198a1);
+.github-chat-status.sent {
+  color: var(--fgColor-muted, #9198a1);
 }
 
 /* Read - filled double checkmark */
-.github-chat-status.read svg {
-  fill: var(--bgColor-accent-emphasis, #1f6feb);
+.github-chat-status.read {
+  color: var(--bgColor-accent-emphasis, #1f6feb);
 }
 
 /* Failed - red X */
-.github-chat-status.failed svg {
-  fill: #f85149;
+.github-chat-status.failed {
+  color: #f85149;
 }
 
 /* Message meta line */

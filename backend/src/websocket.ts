@@ -33,6 +33,11 @@ function addLocalUserSocket(socket: AuthenticatedSocket) {
     localUserSockets.set(socket.userId, new Set());
   }
   localUserSockets.get(socket.userId)!.add(socket);
+  console.log(
+    `Added socket for user ${socket.userId}, total sockets: ${
+      localUserSockets.get(socket.userId)!.size
+    }`,
+  );
 }
 
 // Remove socket from local user tracking
@@ -41,8 +46,14 @@ function removeLocalUserSocket(socket: AuthenticatedSocket) {
   const sockets = localUserSockets.get(socket.userId);
   if (sockets) {
     sockets.delete(socket);
+    console.log(
+      `Removed socket for user ${socket.userId}, remaining: ${sockets.size}`,
+    );
     if (sockets.size === 0) {
       localUserSockets.delete(socket.userId);
+      console.log(
+        `No more sockets for user ${socket.userId}, removed from map`,
+      );
     }
   }
 }
@@ -74,11 +85,23 @@ function removeLocalConversationSocket(socket: AuthenticatedSocket) {
 // Send to all local sockets for a user
 function sendToLocalUser(userId: number, message: any) {
   const sockets = localUserSockets.get(userId);
-  if (!sockets) return;
+  if (!sockets) {
+    console.log(`No local sockets found for user ${userId}`);
+    return;
+  }
+  console.log(
+    `Sending to ${sockets.size} local sockets for user ${userId}:`,
+    message.type,
+  );
   const messageStr = JSON.stringify(message);
   sockets.forEach((socket) => {
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(messageStr);
+      console.log(`Sent ${message.type} to socket for user ${userId}`);
+    } else {
+      console.log(
+        `Socket not open for user ${userId}, state: ${socket.readyState}`,
+      );
     }
   });
 }
@@ -349,6 +372,13 @@ export function createWebSocketServer(port: number) {
           const messageIds = message.messageIds as number[];
           if (!Array.isArray(messageIds) || messageIds.length === 0) return;
 
+          console.log(
+            "Marking messages as read:",
+            messageIds,
+            "in conversation:",
+            ws.conversationId,
+          );
+
           // Update messages as read in database and get the sender IDs
           const updatedMessages = await sql`
             UPDATE messages 
@@ -359,6 +389,8 @@ export function createWebSocketServer(port: number) {
             AND read_at IS NULL
             RETURNING id, sender_id
           `;
+
+          console.log("Updated messages:", updatedMessages);
 
           if (updatedMessages.length === 0) return;
 
@@ -373,7 +405,15 @@ export function createWebSocketServer(port: number) {
 
           // Notify each sender about their messages being read (globally, not just in conversation)
           for (const [senderId, msgIds] of messagesBySender) {
-            broadcastToUser(senderId, {
+            console.log(
+              `Sending messages_read to user ${senderId} for messages:`,
+              msgIds,
+            );
+            console.log(
+              `Local user sockets for ${senderId}:`,
+              localUserSockets.has(senderId),
+            );
+            await broadcastToUser(senderId, {
               type: "messages_read",
               conversationId: ws.conversationId,
               messageIds: msgIds,
