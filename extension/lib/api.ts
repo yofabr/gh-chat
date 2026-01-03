@@ -176,21 +176,30 @@ export async function getOrCreateConversation(username: string): Promise<{
   }
 }
 
-// Get messages in a conversation
+// Get messages in a conversation (with pagination support)
+export interface MessagesResponse {
+  messages: Message[]
+  hasMore: boolean
+}
+
 export async function getMessages(
   conversationId: string,
-  before?: string
-): Promise<Message[]> {
+  before?: string,
+  limit: number = 50
+): Promise<MessagesResponse> {
   try {
-    const params = before ? `?before=${before}` : ""
+    const params = new URLSearchParams()
+    if (before) params.set("before", before)
+    params.set("limit", String(limit))
+    const queryString = params.toString() ? `?${params.toString()}` : ""
     const response = await fetchWithAuth(
-      `/conversations/${conversationId}/messages${params}`
+      `/conversations/${conversationId}/messages${queryString}`
     )
-    if (!response.ok) return []
+    if (!response.ok) return { messages: [], hasMore: false }
     const data = await response.json()
-    return data.messages || []
+    return { messages: data.messages || [], hasMore: data.hasMore || false }
   } catch {
-    return []
+    return { messages: [], hasMore: false }
   }
 }
 

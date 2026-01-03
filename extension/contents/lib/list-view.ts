@@ -28,8 +28,12 @@ export async function prefetchMessages(conversationId: string): Promise<void> {
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) return
 
   try {
-    const messages = await getMessages(conversationId)
-    messageCache.set(conversationId, { messages, timestamp: Date.now() })
+    const { messages } = await getMessages(conversationId)
+    messageCache.set(conversationId, {
+      messages,
+      hasMore: messages.length >= 50,
+      timestamp: Date.now()
+    })
   } catch {
     // Silently fail - we'll fetch again when opening
   }

@@ -274,13 +274,24 @@ conversations.get("/:id/messages", async (c) => {
 
   let messages;
   if (before) {
+    // Verify the "before" message exists
+    const beforeMsg = await sql`
+      SELECT id FROM messages WHERE id = ${before}::uuid
+    `;
+    if (beforeMsg.length === 0) {
+      return c.json({ error: "Invalid before message ID" }, 400);
+    }
+
+    // Use subquery to avoid timezone issues when passing Date objects back to PostgreSQL
+    // This handles messages with the same timestamp correctly using (created_at, id) tuple comparison
     messages = await sql`
       SELECT m.id, m.content, m.created_at, m.read_at, m.sender_id,
              u.username as sender_username, u.display_name as sender_display_name, u.avatar_url as sender_avatar
       FROM messages m
       JOIN users u ON m.sender_id = u.id
-      WHERE m.conversation_id = ${conversationId}::uuid AND m.id < ${before}::uuid
-      ORDER BY m.created_at DESC
+      WHERE m.conversation_id = ${conversationId}::uuid 
+        AND (m.created_at, m.id) < (SELECT created_at, id FROM messages WHERE id = ${before}::uuid)
+      ORDER BY m.created_at DESC, m.id DESC
       LIMIT ${limit}
     `;
   } else {
@@ -290,7 +301,7 @@ conversations.get("/:id/messages", async (c) => {
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       WHERE m.conversation_id = ${conversationId}::uuid
-      ORDER BY m.created_at DESC
+      ORDER BY m.created_at DESC, m.id DESC
       LIMIT ${limit}
     `;
   }
@@ -301,8 +312,11 @@ conversations.get("/:id/messages", async (c) => {
     messages.map((m: any) => ({ id: m.id, read_at: m.read_at })),
   );
 
+  // Check if there are more messages before the oldest one we fetched
+  const hasMore = messages.length === limit;
+
   // Reverse to get chronological order
-  return c.json({ messages: messages.reverse() });
+  return c.json({ messages: messages.reverse(), hasMore });
 });
 
 // Send a message

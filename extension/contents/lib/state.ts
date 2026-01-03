@@ -41,7 +41,7 @@ export let currentOtherUser: CurrentOtherUser | null = null
 // Message cache for instant loading
 export const messageCache: Map<
   string,
-  { messages: ApiMessage[]; timestamp: number }
+  { messages: ApiMessage[]; hasMore: boolean; timestamp: number }
 > = new Map()
 export const CACHE_TTL = 30000 // 30 seconds
 
