@@ -362,7 +362,7 @@
 }
 
 .github-chat-message.sent .github-chat-bubble {
-  background: var(--bgColor-accent-emphasis, #1f6feb);
+  background: var(--bgColor-success-emphasis, #238636);
   color: #fff;
   border-bottom-right-radius: 4px;
 }
@@ -416,7 +416,7 @@
 }
 
 .github-chat-input:focus {
-  border-color: var(--borderColor-accent-emphasis, #1f6feb);
+  border-color: var(--borderColor-success-emphasis, #238636);
 }
 
 .github-chat-send {
@@ -427,7 +427,7 @@
   height: 40px;
   border-radius: 50%;
   border: none;
-  background: var(--bgColor-accent-emphasis, #1f6feb);
+  background: var(--bgColor-success-emphasis, #238636);
   color: #fff;
   cursor: pointer;
   transition:
@@ -437,7 +437,7 @@
 }
 
 .github-chat-send:hover {
-  background: var(--bgColor-accent-muted, #388bfd);
+  background: var(--bgColor-success-muted, #2ea043);
 }
 
 .github-chat-send:active {
@@ -557,7 +557,7 @@
   font-weight: 600;
   line-height: 18px;
   text-align: center;
-  background-color: #388bfd;
+  background-color: #238636;
   color: #ffffff;
   border-radius: 10px;
   display: flex;
@@ -652,7 +652,7 @@
 
 /* Read - filled double checkmark */
 .github-chat-status.read {
-  color: var(--bgColor-accent-emphasis, #1f6feb);
+  color: var(--bgColor-success-emphasis, #238636);
 }
 
 /* Failed - red X */
@@ -731,7 +731,7 @@
   width: 24px;
   height: 24px;
   border: 2px solid var(--borderColor-default, #3d444d);
-  border-top-color: var(--fgColor-accent, #388bfd);
+  border-top-color: var(--fgColor-success, #238636);
   border-radius: 50%;
   animation: spinner-spin 0.8s linear infinite;
 }
