@@ -414,9 +414,37 @@ window.addEventListener("message", (event) => {
   }
 })
 
+// Check URL for auth token (redirect-based auth flow)
+function checkUrlForAuthToken(): void {
+  const params = new URLSearchParams(window.location.search)
+  const token = params.get("ghchat_token")
+
+  if (token) {
+    // Store the token via background script
+    chrome.runtime.sendMessage({ type: "AUTH_SUCCESS", token }, (response) => {
+      if (response?.success) {
+        console.log("GH Chat: Auth token received and stored")
+      }
+    })
+
+    // Clean up the URL (remove the token param)
+    params.delete("ghchat_token")
+    const newSearch = params.toString()
+    const newUrl =
+      window.location.pathname +
+      (newSearch ? `?${newSearch}` : "") +
+      window.location.hash
+    window.history.replaceState({}, "", newUrl)
+
+    // Reload to apply auth state
+    window.location.reload()
+  }
+}
+
 // Run on page load
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
+    checkUrlForAuthToken()
     initHeaderButton()
     initProfilePage()
     startUnreadPolling()
@@ -424,6 +452,7 @@ if (document.readyState === "loading") {
     ensureWebSocketConnected().catch(console.error)
   })
 } else {
+  checkUrlForAuthToken()
   initHeaderButton()
   initProfilePage()
   startUnreadPolling()

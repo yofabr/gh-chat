@@ -5,23 +5,6 @@ export const Route = createFileRoute("/auth/success")({
   component: AuthSuccessPage,
 });
 
-// Extension ID - will need to be updated after loading extension
-const EXTENSION_ID = import.meta.env.VITE_EXTENSION_ID || "";
-
-// Chrome extension API types
-declare const chrome:
-  | {
-      runtime?: {
-        sendMessage?: (
-          extensionId: string,
-          message: unknown,
-          callback: (response: { success?: boolean }) => void,
-        ) => void;
-        lastError?: { message: string };
-      };
-    }
-  | undefined;
-
 function AuthSuccessPage() {
   const [status, setStatus] = useState<"loading" | "success" | "error">(
     "loading",
@@ -41,41 +24,15 @@ function AuthSuccessPage() {
     // Store token in localStorage as backup
     localStorage.setItem("github-chat-token", token);
 
-    // Try to send message to extension via chrome.runtime.sendMessage
-    const chromeRuntime =
-      typeof chrome !== "undefined" ? chrome?.runtime : undefined;
-    if (EXTENSION_ID && chromeRuntime?.sendMessage) {
-      chromeRuntime.sendMessage(
-        EXTENSION_ID,
-        { type: "AUTH_SUCCESS", token },
-        (response) => {
-          if (chromeRuntime.lastError) {
-            console.log(
-              "Could not send to extension:",
-              chromeRuntime.lastError.message,
-            );
-            setStatus("success");
-            setMessage(
-              "Signed in! If the extension doesn't detect this, please reload the GitHub page.",
-            );
-          } else if (response?.success) {
-            console.log("Token sent to extension successfully");
-            setStatus("success");
-            setMessage("You have been signed in successfully!");
-          } else {
-            setStatus("success");
-            setMessage("Signed in! Please reload the GitHub page.");
-          }
-        },
-      );
-    } else {
-      console.log(
-        "Extension messaging not available, Extension ID:",
-        EXTENSION_ID,
-      );
-      setStatus("success");
-      setMessage("Signed in! Please reload the GitHub page to start chatting.");
-    }
+    // Redirect to GitHub with token in URL
+    // The extension's content script will pick it up and store it
+    setStatus("success");
+    setMessage("Redirecting to GitHub...");
+
+    // Small delay to show success state, then redirect
+    setTimeout(() => {
+      window.location.href = `https://github.com?ghchat_token=${encodeURIComponent(token)}`;
+    }, 500);
   }, []);
 
   return (
@@ -107,9 +64,7 @@ function AuthSuccessPage() {
             </div>
             <h1 className="text-2xl font-bold mb-2">Signed In!</h1>
             <p className="text-gray-400 mb-4">{message}</p>
-            <p className="text-gray-500 text-sm">
-              You can close this window and return to GitHub.
-            </p>
+            <div className="w-6 h-6 mx-auto border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
           </>
         )}
 
@@ -133,7 +88,7 @@ function AuthSuccessPage() {
             <h1 className="text-2xl font-bold mb-2">Sign In Failed</h1>
             <p className="text-gray-400 mb-4">{message}</p>
             <a
-              href="/login"
+              href="/extension/login"
               className="inline-block px-6 py-2 bg-[#238636] hover:bg-[#2ea043] text-white font-semibold rounded-lg transition-colors"
             >
               Try Again
