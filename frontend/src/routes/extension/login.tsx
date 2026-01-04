@@ -17,16 +17,7 @@ function ExtensionLoginPage() {
       <div className="max-w-md w-full mx-auto p-8">
         <div className="text-center mb-8">
           <div className="w-20 h-20 mx-auto mb-6 bg-[#238636] rounded-full flex items-center justify-center">
-            <svg
-              viewBox="0 0 16 16"
-              className="w-10 h-10 fill-white"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                fillRule="evenodd"
-                d="M1.5 2.75a.25.25 0 01.25-.25h12.5a.25.25 0 01.25.25v8.5a.25.25 0 01-.25.25h-6.5a.75.75 0 00-.53.22L4.5 14.44v-2.19a.75.75 0 00-.75-.75h-2a.25.25 0 01-.25-.25v-8.5zM1.75 1A1.75 1.75 0 000 2.75v8.5C0 12.216.784 13 1.75 13H3v1.543a1.457 1.457 0 002.487 1.03L8.061 13h6.189A1.75 1.75 0 0016 11.25v-8.5A1.75 1.75 0 0014.25 1H1.75z"
-              />
-            </svg>
+            <img src="/logo.png" alt="" />
           </div>
           <h1 className="text-3xl font-bold mb-3">Welcome to GH Chat</h1>
           <p className="text-gray-400 text-lg">
@@ -60,7 +51,7 @@ function ExtensionLoginPage() {
 
         <button
           onClick={handleGitHubLogin}
-          className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-[#238636] hover:bg-[#2ea043] text-white font-semibold rounded-lg transition-colors text-lg"
+          className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-[#238636] hover:bg-[#2ea043] text-white font-medium rounded-2xl transition-colors text-lg"
         >
           <svg
             className="w-6 h-6"
@@ -72,10 +63,6 @@ function ExtensionLoginPage() {
           </svg>
           Sign in with GitHub
         </button>
-
-        <p className="text-center text-gray-500 text-sm mt-6">
-          By signing in, you agree to our Terms of Service and Privacy Policy
-        </p>
       </div>
     </div>
   );
