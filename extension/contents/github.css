@@ -347,10 +347,12 @@
 
 .github-chat-message.sent {
   align-self: flex-end;
+  align-items: flex-end;
 }
 
 .github-chat-message.received {
   align-self: flex-start;
+  align-items: flex-start;
 }
 
 /* Message wrapper with actions */
@@ -531,19 +533,18 @@
 
 /* Message Reactions Display */
 .github-chat-reactions {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 4px;
-  padding: 0 4px;
 }
 
 .github-chat-message.sent .github-chat-reactions {
-  justify-content: flex-end;
+  align-self: flex-end;
 }
 
 .github-chat-message.received .github-chat-reactions {
-  justify-content: flex-start;
+  align-self: flex-start;
 }
 
 .github-chat-reaction {
