@@ -10,8 +10,15 @@ import "./github.css"
 
 // Import from modular files
 import { checkAuth, getCurrentUserInfo, openLogin } from "./lib/auth"
-import { renderConversationViewInto } from "./lib/conversation-view"
-import { renderListView } from "./lib/list-view"
+import {
+  cancelPendingRead,
+  renderConversationViewInto
+} from "./lib/conversation-view"
+import {
+  renderListView,
+  renderListViewAnimated,
+  startListMessageListener
+} from "./lib/list-view"
 import {
   getProfileAvatar,
   getProfileDisplayName,
@@ -54,6 +61,9 @@ function closeChatDrawer(): void {
   // Stop typing indicator before closing
   sendStopTyping()
 
+  // Cancel any pending mark-as-read (user left before reading)
+  cancelPendingRead()
+
   // Clean up WebSocket connection
   if (wsCleanup) {
     wsCleanup()
@@ -85,6 +95,9 @@ function goBackToList(): void {
   // Stop typing indicator
   sendStopTyping()
 
+  // Cancel any pending mark-as-read (user left before reading)
+  cancelPendingRead()
+
   // Clean up WebSocket connection for this conversation
   if (wsCleanup) {
     wsCleanup()
@@ -92,7 +105,10 @@ function goBackToList(): void {
   }
   setCurrentConversationId(null)
   setCurrentOtherUser(null)
+
+  // Set current view and start listener IMMEDIATELY (synchronously)
   setCurrentView("list")
+  startListMessageListener()
 
   // Animate transition: slide conversation out, slide list in
   const drawer = chatDrawer
@@ -102,10 +118,8 @@ function goBackToList(): void {
       currentViewEl.classList.add("slide-out-right")
     }
 
-    // Import dynamically to avoid circular deps
-    import("./lib/list-view").then(({ renderListViewAnimated }) => {
-      renderListViewAnimated("slide-in-left")
-    })
+    // Render list view with animation
+    renderListViewAnimated("slide-in-left")
   }
 }
 
@@ -117,6 +131,9 @@ async function openChatListDrawer(): Promise<void> {
       setCurrentUserId(userInfo?.id || null)
     })
   }
+
+  // Ensure WebSocket is connected to receive real-time updates
+  ensureWebSocketConnected().catch(console.error)
 
   // Create overlay if not exists
   let overlay = chatOverlay
