@@ -324,12 +324,23 @@ function connectWebSocket(token: string): Promise<void> {
         }
 
         if (data.type === "new_message" && data.message) {
+          console.log("Received new_message via WebSocket:", data)
+          console.log(
+            "messageCallback:",
+            !!messageCallback,
+            "globalMessageCallback:",
+            !!globalMessageCallback
+          )
           // Call the conversation-specific callback if set
           if (messageCallback) {
             messageCallback(data.message)
           }
           // Also call the global callback for list updates
           if (globalMessageCallback && data.conversationId) {
+            console.log(
+              "Calling globalMessageCallback for conversationId:",
+              data.conversationId
+            )
             globalMessageCallback(data.conversationId, data.message)
           }
         }
