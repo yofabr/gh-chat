@@ -529,14 +529,23 @@ export async function renderConversationViewInto(
 
         hideTypingIndicator()
 
-        // Update cache with new message
+        // Update cache with new message (check for duplicates)
         const cachedData = messageCache.get(conversation.id)
         if (cachedData) {
-          cachedData.messages.push(newMessage)
-          cachedData.timestamp = Date.now()
+          const exists = cachedData.messages.some((m) => m.id === newMessage.id)
+          if (!exists) {
+            cachedData.messages.push(newMessage)
+            cachedData.timestamp = Date.now()
+          }
         }
 
+        // Check if message already displayed in the DOM
         const msgContainer = container.querySelector("#github-chat-messages")
+        const existingMsgEl = msgContainer?.querySelector(
+          `[data-message-id="${newMessage.id}"]`
+        )
+        if (existingMsgEl) return // Already displayed, skip
+
         const emptyState = msgContainer?.querySelector(".github-chat-empty")
         if (emptyState) emptyState.remove()
 

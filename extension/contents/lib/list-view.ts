@@ -79,9 +79,12 @@ function updateConversationInList(
   // Update the message cache so the conversation shows the new message when opened
   const cached = messageCache.get(conversationId)
   if (cached) {
-    // Add the new message to the cache
-    cached.messages.push(message)
-    cached.timestamp = Date.now()
+    // Check if message already exists to avoid duplicates
+    const exists = cached.messages.some((m) => m.id === message.id)
+    if (!exists) {
+      cached.messages.push(message)
+      cached.timestamp = Date.now()
+    }
   }
 
   // Check if this is our own message (don't show unread for sent messages)
@@ -311,15 +314,35 @@ export function renderListViewAnimated(animationClass: string): void {
   startListMessageListener()
 
   // Use cached chats for instant rendering
-  const cachedChats =
+  const hasCachedChats =
     chatListCache && Date.now() - chatListCache.timestamp < CHAT_LIST_CACHE_TTL
-      ? chatListCache.chats
-      : []
+  const cachedChats = hasCachedChats ? chatListCache.chats : []
 
   // Create new view element with animation
   const viewEl = document.createElement("div")
   viewEl.className = `github-chat-view ${animationClass}`
-  viewEl.innerHTML = generateListViewInnerHTML(cachedChats)
+
+  // Show loading state if no cached chats, otherwise show cached chats
+  if (!hasCachedChats) {
+    viewEl.innerHTML = `
+      <div class="github-chat-header">
+        <div class="github-chat-user-info">
+          <span class="github-chat-display-name">Messages</span>
+          <span class="github-chat-username">Loading...</span>
+        </div>
+        <button class="github-chat-close" aria-label="Close">
+          <svg viewBox="0 0 16 16" width="16" height="16">
+            <path fill="currentColor" d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="github-chat-list" style="display: flex; align-items: center; justify-content: center;">
+        <div class="github-chat-loading-spinner"></div>
+      </div>
+    `
+  } else {
+    viewEl.innerHTML = generateListViewInnerHTML(cachedChats)
+  }
 
   // Remove old view after animation
   const oldView = chatDrawer.querySelector(".github-chat-view")
@@ -331,10 +354,24 @@ export function renderListViewAnimated(animationClass: string): void {
       },
       { once: true }
     )
+    // Fallback: remove after timeout in case animation doesn't fire
+    setTimeout(() => {
+      if (oldView.isConnected) oldView.remove()
+    }, 300)
   }
 
   chatDrawer.appendChild(viewEl)
-  setupListViewEventListeners(cachedChats, viewEl)
+
+  // Add close button listener for loading state
+  if (!hasCachedChats) {
+    const closeBtn = viewEl.querySelector(".github-chat-close")
+    closeBtn?.addEventListener("click", () => {
+      const nav = getNavigationCallbacks()
+      nav?.closeChatDrawer()
+    })
+  } else {
+    setupListViewEventListeners(cachedChats, viewEl)
+  }
 
   // Always refresh chats in background and update the view
   getAllChats().then((freshChats) => {
