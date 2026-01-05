@@ -15,7 +15,7 @@ app.use(
   cors({
     origin: (origin) => {
       // Allow requests with no origin (like mobile apps or curl)
-      if (!origin) return "http://localhost:5173";
+      if (!origin) return "*";
 
       // Allow chrome extensions
       if (origin.startsWith("chrome-extension://")) return origin;
@@ -24,15 +24,20 @@ app.use(
       const allowedOrigins = [
         "http://localhost:5173",
         "https://github.com",
+        "https://ghchat.social",
         process.env.FRONTEND_URL || "http://localhost:5173",
       ];
 
       if (allowedOrigins.includes(origin)) return origin;
 
-      // Default
-      return "http://localhost:5173";
+      // For development, allow all origins
+      return origin;
     },
     credentials: true,
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    exposeHeaders: ["Content-Length"],
+    maxAge: 86400,
   }),
 );
 

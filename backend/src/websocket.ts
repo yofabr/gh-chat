@@ -168,12 +168,36 @@ async function verifyToken(
   }
 }
 
+// Allowed origins for WebSocket connections
+const ALLOWED_WS_ORIGINS = [
+  "https://github.com",
+  "http://localhost:5173",
+  process.env.FRONTEND_URL || "http://localhost:5173",
+];
+
+function isOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) return true; // Allow connections without origin (e.g., from extensions)
+  if (origin.startsWith("chrome-extension://")) return true;
+  return ALLOWED_WS_ORIGINS.includes(origin);
+}
+
 // Create WebSocket server
 export function createWebSocketServer(port: number) {
   // Initialize Redis pub/sub
   initRedis();
 
-  const wss = new WebSocketServer({ port });
+  const wss = new WebSocketServer({
+    port,
+    verifyClient: (info, callback) => {
+      const origin = info.origin || info.req.headers.origin;
+      if (isOriginAllowed(origin)) {
+        callback(true);
+      } else {
+        console.log(`WebSocket connection rejected from origin: ${origin}`);
+        callback(false, 403, "Forbidden");
+      }
+    },
+  });
 
   console.log(
     `WebSocket server ${SERVER_ID} running on ws://localhost:${port}`,
