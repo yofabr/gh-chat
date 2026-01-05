@@ -129,129 +129,181 @@ conversations.get("/unread-count", async (c) => {
 
 // Get or create a conversation with a specific user by username
 conversations.post("/with/:username", async (c) => {
-  const user = c.get("user");
-  const targetUsername = c.req.param("username");
+  try {
+    const user = c.get("user");
+    const targetUsername = c.req.param("username");
 
-  if (targetUsername.toLowerCase() === user.username.toLowerCase()) {
-    return c.json({ error: "Cannot start conversation with yourself" }, 400);
-  }
+    console.log(
+      `[CONV] Starting conversation request for: ${targetUsername} by user: ${user.username}`,
+    );
 
-  // Find the target user (case-insensitive)
-  let targetUsers = await sql`
-    SELECT id, username, display_name, avatar_url, has_account
-    FROM users WHERE LOWER(username) = LOWER(${targetUsername})
-  `;
+    if (targetUsername.toLowerCase() === user.username.toLowerCase()) {
+      console.log(`[CONV] User tried to chat with themselves`);
+      return c.json({ error: "Cannot start conversation with yourself" }, 400);
+    }
 
-  let targetUser = targetUsers[0];
-  let userCreated = false;
+    // Find the target user (case-insensitive)
+    console.log(`[CONV] Looking up user in database: ${targetUsername}`);
+    let targetUsers = await sql`
+      SELECT id, username, display_name, avatar_url, has_account
+      FROM users WHERE LOWER(username) = LOWER(${targetUsername})
+    `;
+    console.log(
+      `[CONV] Database lookup result: ${targetUsers.length} users found`,
+    );
 
-  // If user doesn't exist, create a placeholder by fetching from GitHub API
-  if (!targetUser) {
-    try {
-      const githubResponse = await fetch(
-        `https://api.github.com/users/${targetUsername}`,
-        {
-          headers: {
-            Accept: "application/vnd.github.v3+json",
-            "User-Agent": "GitHub-Chat-App",
-          },
-        },
+    let targetUser = targetUsers[0];
+    let userCreated = false;
+
+    // If user doesn't exist, create a placeholder by fetching from GitHub API
+    if (!targetUser) {
+      console.log(
+        `[CONV] User not in DB, fetching from GitHub API: ${targetUsername}`,
       );
+      try {
+        const githubResponse = await fetch(
+          `https://api.github.com/users/${targetUsername}`,
+          {
+            headers: {
+              Accept: "application/vnd.github.v3+json",
+              "User-Agent": "GitHub-Chat-App",
+            },
+          },
+        );
 
-      if (!githubResponse.ok) {
-        return c.json({ error: "GitHub user not found" }, 404);
-      }
+        console.log(
+          `[CONV] GitHub API response status: ${githubResponse.status}`,
+        );
 
-      const githubUser = (await githubResponse.json()) as {
-        id: number;
-        login: string;
-        name: string | null;
-        avatar_url: string;
-      };
+        if (!githubResponse.ok) {
+          const errorText = await githubResponse.text();
+          console.log(`[CONV] GitHub API error: ${errorText}`);
+          return c.json({ error: "GitHub user not found" }, 404);
+        }
 
-      // Check if user already exists by github_id (in case username changed)
-      const existingByGithubId = await sql`
+        const githubUser = (await githubResponse.json()) as {
+          id: number;
+          login: string;
+          name: string | null;
+          avatar_url: string;
+        };
+
+        // Check if user already exists by github_id (in case username changed)
+        console.log(
+          `[CONV] Checking if github_id ${githubUser.id} exists in DB`,
+        );
+        const existingByGithubId = await sql`
         SELECT id, username, display_name, avatar_url, has_account
         FROM users WHERE github_id = ${githubUser.id}
       `;
+        console.log(
+          `[CONV] Found ${existingByGithubId.length} users by github_id`,
+        );
 
-      if (existingByGithubId.length > 0) {
-        // Update username if it changed
-        if (existingByGithubId[0].username !== githubUser.login) {
-          await sql`
+        if (existingByGithubId.length > 0) {
+          console.log(`[CONV] User exists by github_id, updating if needed`);
+          // Update username if it changed
+          if (existingByGithubId[0].username !== githubUser.login) {
+            await sql`
             UPDATE users SET username = ${githubUser.login}, display_name = ${
-            githubUser.name || githubUser.login
-          }, avatar_url = ${githubUser.avatar_url}
+              githubUser.name || githubUser.login
+            }, avatar_url = ${githubUser.avatar_url}
             WHERE github_id = ${githubUser.id}
           `;
-          existingByGithubId[0].username = githubUser.login;
-          existingByGithubId[0].display_name =
-            githubUser.name || githubUser.login;
-          existingByGithubId[0].avatar_url = githubUser.avatar_url;
-        }
-        targetUser = existingByGithubId[0];
-      } else {
-        // Create placeholder user
-        const newUsers = await sql`
+            existingByGithubId[0].username = githubUser.login;
+            existingByGithubId[0].display_name =
+              githubUser.name || githubUser.login;
+            existingByGithubId[0].avatar_url = githubUser.avatar_url;
+          }
+          targetUser = existingByGithubId[0];
+        } else {
+          // Create placeholder user with conflict handling
+          console.log(`[CONV] Creating new user: ${githubUser.login}`);
+          const newUsers = await sql`
           INSERT INTO users (github_id, username, display_name, avatar_url, has_account)
           VALUES (${githubUser.id}, ${githubUser.login}, ${
-          githubUser.name || githubUser.login
-        }, ${githubUser.avatar_url}, FALSE)
+            githubUser.name || githubUser.login
+          }, ${githubUser.avatar_url}, FALSE)
+          ON CONFLICT (github_id) DO UPDATE SET
+            username = EXCLUDED.username,
+            display_name = EXCLUDED.display_name,
+            avatar_url = EXCLUDED.avatar_url
           RETURNING id, username, display_name, avatar_url, has_account
         `;
-        targetUser = newUsers[0];
-        userCreated = true;
+          console.log(`[CONV] User created/updated: ${newUsers[0]?.id}`);
+          targetUser = newUsers[0];
+          userCreated = true;
+        }
+      } catch (error) {
+        console.error("[CONV] Error fetching/creating GitHub user:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        return c.json(
+          { error: `Failed to start conversation: ${errorMessage}` },
+          500,
+        );
       }
-    } catch (error) {
-      console.error("Error fetching/creating GitHub user:", error);
-      return c.json(
-        { error: "Failed to start conversation. Please try again." },
-        500,
-      );
     }
-  }
 
-  // Ensure consistent ordering (alphabetically lower UUID first)
-  const user1Id = user.user_id < targetUser.id ? user.user_id : targetUser.id;
-  const user2Id = user.user_id < targetUser.id ? targetUser.id : user.user_id;
+    console.log(
+      `[CONV] Target user resolved: ${targetUser.id} (${targetUser.username})`,
+    );
 
-  // Try to find existing conversation
-  let convResults = await sql`
+    // Ensure consistent ordering (alphabetically lower UUID first)
+    const user1Id = user.user_id < targetUser.id ? user.user_id : targetUser.id;
+    const user2Id = user.user_id < targetUser.id ? targetUser.id : user.user_id;
+
+    console.log(
+      `[CONV] Looking for existing conversation between ${user1Id} and ${user2Id}`,
+    );
+    // Try to find existing conversation
+    let convResults = await sql`
     SELECT id, created_at, updated_at
     FROM conversations
     WHERE user1_id = ${user1Id} AND user2_id = ${user2Id}
   `;
+    console.log(`[CONV] Found ${convResults.length} existing conversations`);
 
-  let conversation = convResults[0];
-  let conversationCreated = false;
+    let conversation = convResults[0];
+    let conversationCreated = false;
 
-  // Create if doesn't exist
-  if (!conversation) {
-    const newConvs = await sql`
+    // Create if doesn't exist
+    if (!conversation) {
+      console.log(`[CONV] Creating new conversation`);
+      const newConvs = await sql`
       INSERT INTO conversations (user1_id, user2_id)
       VALUES (${user1Id}, ${user2Id})
       RETURNING id, created_at, updated_at
     `;
-    conversation = newConvs[0];
-    conversationCreated = true;
-  }
+      conversation = newConvs[0];
+      conversationCreated = true;
+      console.log(`[CONV] New conversation created: ${conversation.id}`);
+    }
 
-  return c.json({
-    conversation: {
-      id: conversation.id,
-      created_at: conversation.created_at,
-      updated_at: conversation.updated_at,
-      other_user: {
-        id: targetUser.id,
-        username: targetUser.username,
-        display_name: targetUser.display_name,
-        avatar_url: targetUser.avatar_url,
-        has_account: targetUser.has_account,
+    console.log(`[CONV] Success! Returning conversation ${conversation.id}`);
+    return c.json({
+      conversation: {
+        id: conversation.id,
+        created_at: conversation.created_at,
+        updated_at: conversation.updated_at,
+        other_user: {
+          id: targetUser.id,
+          username: targetUser.username,
+          display_name: targetUser.display_name,
+          avatar_url: targetUser.avatar_url,
+          has_account: targetUser.has_account,
+        },
       },
-    },
-    created: conversationCreated,
-    user_created: userCreated,
-  });
+      created: conversationCreated,
+      user_created: userCreated,
+    });
+  } catch (error) {
+    console.error("[CONV] Unhandled error in POST /with/:username:", error);
+    return c.json(
+      { error: "Failed to start conversation. Please try again." },
+      500,
+    );
+  }
 });
 
 // Get messages in a conversation

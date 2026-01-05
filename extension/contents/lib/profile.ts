@@ -37,14 +37,27 @@ export function isProfilePage(): boolean {
 
 // Get username from the profile page
 export function getProfileUsername(): string | null {
-  const vcardUsername = document.querySelector(".vcard-username")
-  if (vcardUsername)
-    return vcardUsername.textContent?.trim()?.replace("@", "") || null
-
+  // Most reliable: get from URL path
   const pathSegments = window.location.pathname.split("/").filter(Boolean)
-  if (pathSegments.length >= 1) {
+  if (pathSegments.length >= 1 && !pathSegments[0].includes("/")) {
     return pathSegments[0]
   }
+
+  // Fallback: try to extract from vcard
+  const vcardUsername = document.querySelector(".vcard-username")
+  if (vcardUsername) {
+    // Get only the direct text content, clean it up
+    const textNodes = Array.from(vcardUsername.childNodes)
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent?.trim())
+      .filter(Boolean)
+
+    // Remove @ and any special characters like ·
+    const rawText = textNodes[0] || ""
+    const username = rawText.replace("@", "").replace("·", "").trim()
+    if (username) return username
+  }
+
   return null
 }
 

@@ -157,22 +157,48 @@ export async function getOrCreateConversation(username: string): Promise<{
   error?: string
 }> {
   try {
-    const response = await fetchWithAuth(`/conversations/with/${username}`, {
+    const url = `/conversations/with/${encodeURIComponent(username)}`
+    console.log("[API] Starting conversation with:", username)
+    console.log("[API] Full URL:", `${BACKEND_URL}${url}`)
+
+    const response = await fetchWithAuth(url, {
       method: "POST"
     })
 
-    if (!response.ok) {
-      const data = await response.json()
-      return { conversation: null, created: false, error: data.error }
+    console.log("[API] Response status:", response.status)
+
+    const text = await response.text()
+    console.log("[API] Response body:", text.substring(0, 200))
+
+    let data: any
+    try {
+      data = JSON.parse(text)
+    } catch {
+      console.error("[API] Invalid JSON response:", text.substring(0, 500))
+      return {
+        conversation: null,
+        created: false,
+        error: `Server error: ${text.substring(0, 100)}`
+      }
     }
 
-    const data = await response.json()
+    if (!response.ok) {
+      return {
+        conversation: null,
+        created: false,
+        error: data.error || "Failed to start conversation"
+      }
+    }
+
     return {
       conversation: data.conversation,
       created: data.created
     }
   } catch (error) {
-    return { conversation: null, created: false, error: "Network error" }
+    console.error("getOrCreateConversation error:", error)
+    const errorMessage =
+      error instanceof Error ? error.message : "Network error"
+    return { conversation: null, created: false, error: errorMessage }
   }
 }
 
