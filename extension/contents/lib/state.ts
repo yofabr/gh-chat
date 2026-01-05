@@ -32,6 +32,7 @@ export let chatDrawer: HTMLElement | null = null
 export let chatOverlay: HTMLElement | null = null
 export let currentConversationId: string | null = null
 export let currentUserId: string | null = null
+export let currentUsername: string | null = null
 export let wsCleanup: (() => void) | null = null
 export let pendingMessageId = 0
 export let typingTimeout: ReturnType<typeof setTimeout> | null = null
@@ -77,6 +78,14 @@ export function setCurrentUserId(id: string | null) {
 
 export function getCurrentUserId(): string | null {
   return currentUserId
+}
+
+export function setCurrentUsername(username: string | null) {
+  currentUsername = username
+}
+
+export function getCurrentUsername(): string | null {
+  return currentUsername
 }
 
 export function setWsCleanup(cleanup: (() => void) | null) {
