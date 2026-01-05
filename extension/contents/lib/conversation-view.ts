@@ -34,6 +34,46 @@ import {
 import { STATUS_ICONS } from "./types"
 import { escapeHtml, formatTime } from "./utils"
 
+// Message action icons
+const MESSAGE_ACTION_ICONS = {
+  reaction: `<svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm3.82 1.636a.75.75 0 0 1 1.038.175l.007.009c.103.118.22.222.35.31.264.178.683.37 1.285.37.602 0 1.02-.192 1.285-.371.13-.088.247-.192.35-.31l.007-.008a.75.75 0 0 1 1.222.87l-.022.03c-.182.248-.422.49-.717.69-.473.322-1.13.57-2.125.57-.995 0-1.652-.248-2.125-.57a3.3 3.3 0 0 1-.717-.69l-.022-.03a.75.75 0 0 1 .184-1.045ZM12 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM5 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>`,
+  options: `<svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M8 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM1.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm13 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"></path></svg>`
+}
+
+// Generate message HTML with actions
+function generateMessageHTML(
+  messageId: string,
+  content: string,
+  timestamp: number | string,
+  isSent: boolean,
+  statusIcon: string = ""
+): string {
+  const timeStr =
+    typeof timestamp === "string"
+      ? formatTime(new Date(timestamp).getTime())
+      : formatTime(timestamp)
+
+  return `
+    <div class="github-chat-message ${isSent ? "sent" : "received"}" data-message-id="${messageId}">
+      <div class="github-chat-message-wrapper">
+        <div class="github-chat-message-actions">
+          <button class="github-chat-action-btn" data-action="reaction" title="Add reaction">
+            ${MESSAGE_ACTION_ICONS.reaction}
+          </button>
+          <button class="github-chat-action-btn" data-action="options" title="More options">
+            ${MESSAGE_ACTION_ICONS.options}
+          </button>
+        </div>
+        <div class="github-chat-bubble">${escapeHtml(content)}</div>
+      </div>
+      <div class="github-chat-meta">
+        <span class="github-chat-time">${timeStr}</span>
+        ${statusIcon}
+      </div>
+    </div>
+  `
+}
+
 // Pending read timeout - cancelled if user leaves conversation quickly
 let pendingReadTimeout: ReturnType<typeof setTimeout> | null = null
 let pendingReadConversationId: string | null = null
@@ -169,15 +209,13 @@ export async function renderConversationViewInto(
               statusIcon = `<span class="github-chat-status ${statusClass}">${msg.read_at ? STATUS_ICONS.read : STATUS_ICONS.sent}</span>`
             }
 
-            return `
-            <div class="github-chat-message ${isReceived ? "received" : "sent"}" data-message-id="${msg.id}">
-              <div class="github-chat-bubble">${escapeHtml(msg.content)}</div>
-              <div class="github-chat-meta">
-                <span class="github-chat-time">${formatTime(new Date(msg.created_at).getTime())}</span>
-                ${statusIcon}
-              </div>
-            </div>
-          `
+            return generateMessageHTML(
+              msg.id,
+              msg.content,
+              msg.created_at,
+              isSent,
+              statusIcon
+            )
           })
           .join("")
       : '<div class="github-chat-loading">Loading...</div>'
@@ -317,15 +355,13 @@ export async function renderConversationViewInto(
               statusIcon = `<span class="github-chat-status ${statusClass}">${msg.read_at ? STATUS_ICONS.read : STATUS_ICONS.sent}</span>`
             }
 
-            return `
-              <div class="github-chat-message ${isReceived ? "received" : "sent"}" data-message-id="${msg.id}">
-                <div class="github-chat-bubble">${escapeHtml(msg.content)}</div>
-                <div class="github-chat-meta">
-                  <span class="github-chat-time">${formatTime(new Date(msg.created_at).getTime())}</span>
-                  ${statusIcon}
-                </div>
-              </div>
-            `
+            return generateMessageHTML(
+              msg.id,
+              msg.content,
+              msg.created_at,
+              isSent,
+              statusIcon
+            )
           })
           .join("")
       }
@@ -417,15 +453,13 @@ export async function renderConversationViewInto(
               statusIcon = `<span class="github-chat-status ${statusClass}">${msg.read_at ? STATUS_ICONS.read : STATUS_ICONS.sent}</span>`
             }
 
-            return `
-              <div class="github-chat-message ${isReceived ? "received" : "sent"}" data-message-id="${msg.id}">
-                <div class="github-chat-bubble">${escapeHtml(msg.content)}</div>
-                <div class="github-chat-meta">
-                  <span class="github-chat-time">${formatTime(new Date(msg.created_at).getTime())}</span>
-                  ${statusIcon}
-                </div>
-              </div>
-            `
+            return generateMessageHTML(
+              msg.id,
+              msg.content,
+              msg.created_at,
+              isSent,
+              statusIcon
+            )
           })
           .join("")
 
@@ -516,11 +550,22 @@ export async function renderConversationViewInto(
     const messageEl = document.createElement("div")
     messageEl.className = "github-chat-message sent"
     messageEl.id = tempId
+    const pendingStatusIcon = `<span class="github-chat-status pending">${STATUS_ICONS.pending}</span>`
     messageEl.innerHTML = `
-      <div class="github-chat-bubble">${escapeHtml(messageText)}</div>
+      <div class="github-chat-message-wrapper">
+        <div class="github-chat-message-actions">
+          <button class="github-chat-action-btn" data-action="reaction" title="Add reaction">
+            ${MESSAGE_ACTION_ICONS.reaction}
+          </button>
+          <button class="github-chat-action-btn" data-action="options" title="More options">
+            ${MESSAGE_ACTION_ICONS.options}
+          </button>
+        </div>
+        <div class="github-chat-bubble">${escapeHtml(messageText)}</div>
+      </div>
       <div class="github-chat-meta">
         <span class="github-chat-time">${formatTime(Date.now())}</span>
-        <span class="github-chat-status pending">${STATUS_ICONS.pending}</span>
+        ${pendingStatusIcon}
       </div>
     `
     msgContainer?.appendChild(messageEl)
@@ -618,7 +663,17 @@ export async function renderConversationViewInto(
         messageEl.className = "github-chat-message received"
         messageEl.setAttribute("data-message-id", newMessage.id.toString())
         messageEl.innerHTML = `
-          <div class="github-chat-bubble">${escapeHtml(newMessage.content)}</div>
+          <div class="github-chat-message-wrapper">
+            <div class="github-chat-message-actions">
+              <button class="github-chat-action-btn" data-action="reaction" title="Add reaction">
+                ${MESSAGE_ACTION_ICONS.reaction}
+              </button>
+              <button class="github-chat-action-btn" data-action="options" title="More options">
+                ${MESSAGE_ACTION_ICONS.options}
+              </button>
+            </div>
+            <div class="github-chat-bubble">${escapeHtml(newMessage.content)}</div>
+          </div>
           <div class="github-chat-meta">
             <span class="github-chat-time">${formatTime(new Date(newMessage.created_at).getTime())}</span>
           </div>

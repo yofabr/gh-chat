@@ -353,6 +353,66 @@
   align-self: flex-start;
 }
 
+/* Message wrapper with actions */
+.github-chat-message-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+/* Sent: actions appear before bubble (on the left of bubble) */
+.github-chat-message.sent .github-chat-message-wrapper {
+  flex-direction: row;
+}
+
+/* Received: actions appear after bubble (on the right of bubble) */
+.github-chat-message.received .github-chat-message-wrapper {
+  flex-direction: row-reverse;
+}
+
+/* Message action buttons */
+.github-chat-message-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  align-self: center;
+}
+
+.github-chat-message:hover .github-chat-message-actions {
+  opacity: 1;
+}
+
+.github-chat-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fgColor-muted, #9198a1);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.github-chat-action-btn:hover {
+  background-color: var(--bgColor-neutral-muted, rgba(110, 118, 129, 0.4));
+  color: var(--fgColor-default, #f0f6fc);
+}
+
+.github-chat-action-btn:active {
+  background-color: var(--bgColor-neutral-emphasis, rgba(110, 118, 129, 0.6));
+}
+
+.github-chat-action-btn svg {
+  flex-shrink: 0;
+}
+
 .github-chat-bubble {
   padding: 10px 14px;
   border-radius: 16px;
