@@ -107,6 +107,12 @@ export interface Conversation {
   unread_count: number
 }
 
+export interface Reaction {
+  emoji: string
+  user_id: string
+  username: string
+}
+
 export interface Message {
   id: string
   content: string
@@ -116,6 +122,7 @@ export interface Message {
   sender_username: string
   sender_display_name: string
   sender_avatar: string
+  reactions?: Reaction[]
 }
 
 export interface OtherUser {
@@ -264,6 +271,46 @@ export async function markConversationAsRead(
   }
 }
 
+// Add a reaction to a message
+export async function addReaction(
+  conversationId: string,
+  messageId: string,
+  emoji: string
+): Promise<boolean> {
+  try {
+    const response = await fetchWithAuth(
+      `/conversations/${conversationId}/messages/${messageId}/reactions`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emoji })
+      }
+    )
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+// Remove a reaction from a message
+export async function removeReaction(
+  conversationId: string,
+  messageId: string,
+  emoji: string
+): Promise<boolean> {
+  try {
+    const response = await fetchWithAuth(
+      `/conversations/${conversationId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`,
+      {
+        method: "DELETE"
+      }
+    )
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
 // WebSocket connection management
 const WS_URL = process.env.PLASMO_PUBLIC_WS_URL || "ws://localhost:8586"
 
@@ -275,6 +322,15 @@ let messageCallback: ((message: Message) => void) | null = null
 let typingCallback: ((userId: string, username: string) => void) | null = null
 let stopTypingCallback: ((userId: string) => void) | null = null
 let messagesReadCallback: ((messageIds: string[]) => void) | null = null
+let reactionCallback:
+  | ((
+      type: "added" | "removed",
+      messageId: string,
+      emoji: string,
+      userId: string,
+      username: string
+    ) => void)
+  | null = null
 
 // Global callback for any new message (used to update conversation list)
 let globalMessageCallback:
@@ -378,6 +434,37 @@ function connectWebSocket(token: string): Promise<void> {
             }
           }
         }
+
+        // Handle reaction events
+        if (data.type === "reaction_added" && reactionCallback) {
+          if (
+            !data.conversationId ||
+            data.conversationId === currentConversationId
+          ) {
+            reactionCallback(
+              "added",
+              data.messageId,
+              data.emoji,
+              data.user_id,
+              data.username
+            )
+          }
+        }
+
+        if (data.type === "reaction_removed" && reactionCallback) {
+          if (
+            !data.conversationId ||
+            data.conversationId === currentConversationId
+          ) {
+            reactionCallback(
+              "removed",
+              data.messageId,
+              data.emoji,
+              data.user_id,
+              data.username
+            )
+          }
+        }
       } catch (e) {
         console.error("WebSocket message parse error:", e)
       }
@@ -409,6 +496,13 @@ export interface ConversationCallbacks {
   onTyping?: (userId: string, username: string) => void
   onStopTyping?: (userId: string) => void
   onMessagesRead?: (messageIds: string[]) => void
+  onReaction?: (
+    type: "added" | "removed",
+    messageId: string,
+    emoji: string,
+    userId: string,
+    username: string
+  ) => void
 }
 
 // Join a conversation for real-time updates
@@ -425,6 +519,7 @@ export async function joinConversation(
   typingCallback = callbacks.onTyping || null
   stopTypingCallback = callbacks.onStopTyping || null
   messagesReadCallback = callbacks.onMessagesRead || null
+  reactionCallback = callbacks.onReaction || null
   currentConversationId = conversationId
 
   // Connect if not connected
@@ -453,6 +548,7 @@ export async function joinConversation(
             typingCallback = null
             stopTypingCallback = null
             messagesReadCallback = null
+            reactionCallback = null
             currentConversationId = null
           })
           return
