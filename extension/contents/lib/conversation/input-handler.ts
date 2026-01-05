@@ -15,6 +15,7 @@ import {
 } from "../state"
 import { STATUS_ICONS } from "../types"
 import { escapeHtml, formatTime } from "../utils"
+import { showEmojiPickerForInsert } from "./emoji-picker"
 import { MESSAGE_ACTION_ICONS } from "./message-html"
 
 // Setup input event handlers
@@ -49,6 +50,48 @@ export function setupInputHandlers(
   })
 
   sendBtn.addEventListener("click", () => handleSendMessage(container, input))
+
+  // Setup emoji button for inserting emojis
+  setupEmojiButton(container, input)
+}
+
+// Setup emoji button click handler
+function setupEmojiButton(
+  container: HTMLElement,
+  input: HTMLTextAreaElement
+): void {
+  const emojiBtn = container.querySelector("#github-chat-emoji-btn")
+  if (!emojiBtn) return
+
+  emojiBtn.addEventListener("click", (e) => {
+    e.stopPropagation()
+
+    // Show emoji picker in insert mode
+    showEmojiPickerForInsert(emojiBtn as HTMLElement, (emoji: string) => {
+      // Insert emoji at cursor position
+      insertEmojiAtCursor(input, emoji)
+    })
+  })
+}
+
+// Insert emoji at current cursor position in textarea
+function insertEmojiAtCursor(input: HTMLTextAreaElement, emoji: string): void {
+  const start = input.selectionStart
+  const end = input.selectionEnd
+  const text = input.value
+
+  // Insert emoji at cursor position
+  input.value = text.substring(0, start) + emoji + text.substring(end)
+
+  // Move cursor to after the emoji
+  const newCursorPos = start + emoji.length
+  input.setSelectionRange(newCursorPos, newCursorPos)
+
+  // Trigger input event to resize textarea
+  input.dispatchEvent(new Event("input", { bubbles: true }))
+
+  // Focus the input
+  input.focus()
 }
 
 // Handle sending a message with optimistic UI update

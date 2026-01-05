@@ -235,12 +235,17 @@ async function setupAllHandlers(
   const sendBtn = container.querySelector(
     "#github-chat-send"
   ) as HTMLButtonElement
+  const emojiBtn = container.querySelector(
+    "#github-chat-emoji-btn"
+  ) as HTMLButtonElement
   const msgContainer = container.querySelector(
     "#github-chat-messages"
   ) as HTMLElement
 
+  // Enable all input controls
   if (input) input.disabled = false
   if (sendBtn) sendBtn.disabled = false
+  if (emojiBtn) emojiBtn.disabled = false
 
   setupInputHandlers(container, input, sendBtn)
   setupMessageActionHandlers(msgContainer)

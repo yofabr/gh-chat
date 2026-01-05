@@ -50,7 +50,11 @@ export {
 } from "./emoji-popover"
 
 // Emoji picker
-export { showFullEmojiPicker, closeEmojiPicker } from "./emoji-picker"
+export {
+  showFullEmojiPicker,
+  showEmojiPickerForInsert,
+  closeEmojiPicker
+} from "./emoji-picker"
 
 // Input handling
 export { setupInputHandlers } from "./input-handler"

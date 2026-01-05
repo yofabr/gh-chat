@@ -15,9 +15,15 @@ import {
 import { closeEmojiPopover } from "./emoji-popover"
 import { handleReactionOptimistic } from "./reactions"
 
+// Picker mode types
+export type EmojiPickerMode = "reaction" | "insert"
+export type EmojiSelectCallback = (emoji: string) => void
+
 // Full emoji picker state
 let currentEmojiPicker: HTMLElement | null = null
 let currentPickerMessageId: string | null = null
+let currentPickerMode: EmojiPickerMode = "reaction"
+let currentOnSelectCallback: EmojiSelectCallback | null = null
 
 // Close the full emoji picker
 export function closeEmojiPicker(): void {
@@ -25,6 +31,8 @@ export function closeEmojiPicker(): void {
     currentEmojiPicker.remove()
     currentEmojiPicker = null
     currentPickerMessageId = null
+    currentPickerMode = "reaction"
+    currentOnSelectCallback = null
     document.removeEventListener("click", handlePickerOutsideClick)
   }
 }
@@ -37,7 +45,7 @@ function handlePickerOutsideClick(e: MouseEvent): void {
 }
 
 // Render emoji grid for a category or search results
-function renderEmojiGrid(emojis: string[], messageId: string): string {
+function renderEmojiGrid(emojis: string[]): string {
   if (emojis.length === 0) {
     return `<div class="github-chat-emoji-picker-empty">No emojis found</div>`
   }
@@ -45,7 +53,7 @@ function renderEmojiGrid(emojis: string[], messageId: string): string {
   const buttons = emojis
     .map(
       (emoji) =>
-        `<button class="github-chat-emoji-picker-emoji" data-emoji="${emoji}" data-message-id="${messageId}">${emoji}</button>`
+        `<button class="github-chat-emoji-picker-emoji" data-emoji="${emoji}">${emoji}</button>`
     )
     .join("")
 
@@ -53,56 +61,57 @@ function renderEmojiGrid(emojis: string[], messageId: string): string {
 }
 
 // Attach click handlers to emoji buttons in a container
-function attachEmojiClickHandlers(
-  container: HTMLElement,
-  messageId: string
-): void {
+function attachEmojiClickHandlers(container: HTMLElement): void {
   container
     .querySelectorAll(".github-chat-emoji-picker-emoji")
     .forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         e.stopPropagation()
         const emoji = (btn as HTMLElement).dataset.emoji
-        if (
-          !emoji ||
-          !currentConversationId ||
-          !currentUserId ||
-          !currentUsername
-        )
-          return
+        if (!emoji) return
 
         // Save to recent
         saveRecentEmoji(emoji)
 
+        // Capture state before closing (closeEmojiPicker resets these)
+        const mode = currentPickerMode
+        const messageId = currentPickerMessageId
+        const onSelectCallback = currentOnSelectCallback
+
         // Close picker
         closeEmojiPicker()
 
-        // Check if user already reacted with this emoji
-        const messageEl = document.querySelector(
-          `.github-chat-message[data-message-id="${messageId}"]`
-        )
-        const existingReaction = messageEl?.querySelector(
-          `.github-chat-reaction[data-emoji="${emoji}"][data-user-reacted="true"]`
-        )
+        // Handle based on mode
+        if (mode === "insert" && onSelectCallback) {
+          // Insert mode - call the callback with the emoji
+          onSelectCallback(emoji)
+        } else if (mode === "reaction" && messageId) {
+          // Reaction mode - apply reaction to message
+          if (!currentConversationId || !currentUserId || !currentUsername)
+            return
 
-        // Apply reaction
-        await handleReactionOptimistic(
-          currentConversationId,
-          messageId,
-          emoji,
-          !existingReaction,
-          currentUserId,
-          currentUsername
-        )
+          const messageEl = document.querySelector(
+            `.github-chat-message[data-message-id="${messageId}"]`
+          )
+          const existingReaction = messageEl?.querySelector(
+            `.github-chat-reaction[data-emoji="${emoji}"][data-user-reacted="true"]`
+          )
+
+          await handleReactionOptimistic(
+            currentConversationId,
+            messageId,
+            emoji,
+            !existingReaction,
+            currentUserId,
+            currentUsername
+          )
+        }
       })
     })
 }
 
 // Setup all event handlers for the emoji picker
-function setupEmojiPickerHandlers(
-  picker: HTMLElement,
-  messageId: string
-): void {
+function setupEmojiPickerHandlers(picker: HTMLElement): void {
   const searchInput = picker.querySelector(
     ".github-chat-emoji-picker-search"
   ) as HTMLInputElement
@@ -133,7 +142,7 @@ function setupEmojiPickerHandlers(
         content.innerHTML = `
           <div class="github-chat-emoji-picker-section">
             <div class="github-chat-emoji-picker-section-title">Search Results</div>
-            ${renderEmojiGrid(results, messageId)}
+            ${renderEmojiGrid(results)}
           </div>
         `
         // Remove active state from category buttons
@@ -152,7 +161,7 @@ function setupEmojiPickerHandlers(
         content.innerHTML = `
           <div class="github-chat-emoji-picker-section">
             <div class="github-chat-emoji-picker-section-title">${title}</div>
-            ${renderEmojiGrid(emojis, messageId)}
+            ${renderEmojiGrid(emojis)}
           </div>
         `
 
@@ -166,7 +175,7 @@ function setupEmojiPickerHandlers(
       }
 
       // Re-attach click handlers for new emoji buttons
-      attachEmojiClickHandlers(content, messageId)
+      attachEmojiClickHandlers(content)
     }, 150)
   })
 
@@ -202,30 +211,21 @@ function setupEmojiPickerHandlers(
       content.innerHTML = `
         <div class="github-chat-emoji-picker-section">
           <div class="github-chat-emoji-picker-section-title">${title}</div>
-          ${renderEmojiGrid(emojis, messageId)}
+          ${renderEmojiGrid(emojis)}
         </div>
       `
 
       // Re-attach click handlers
-      attachEmojiClickHandlers(content, messageId)
+      attachEmojiClickHandlers(content)
     })
   })
 
   // Initial emoji click handlers
-  attachEmojiClickHandlers(content, messageId)
+  attachEmojiClickHandlers(content)
 }
 
-// Create and show the full emoji picker
-export function showFullEmojiPicker(
-  anchorEl: HTMLElement,
-  messageId: string
-): void {
-  // Close any existing picker or popover
-  closeEmojiPopover()
-  closeEmojiPicker()
-
-  currentPickerMessageId = messageId
-
+// Create the emoji picker HTML element
+function createEmojiPickerElement(): HTMLElement {
   const picker = document.createElement("div")
   picker.className = "github-chat-emoji-picker"
 
@@ -262,10 +262,29 @@ export function showFullEmojiPicker(
     <div class="github-chat-emoji-picker-content">
       <div class="github-chat-emoji-picker-section">
         <div class="github-chat-emoji-picker-section-title">${initialCategory === "recent" ? "Recently Used" : "Smileys & Emotion"}</div>
-        ${renderEmojiGrid(initialEmojis, messageId)}
+        ${renderEmojiGrid(initialEmojis)}
       </div>
     </div>
   `
+
+  return picker
+}
+
+// Show emoji picker for adding reactions to a message
+export function showFullEmojiPicker(
+  anchorEl: HTMLElement,
+  messageId: string
+): void {
+  // Close any existing picker or popover
+  closeEmojiPopover()
+  closeEmojiPicker()
+
+  // Set state for reaction mode
+  currentPickerMode = "reaction"
+  currentPickerMessageId = messageId
+  currentOnSelectCallback = null
+
+  const picker = createEmojiPickerElement()
 
   // Append to chat drawer instead of body, so it stays within the drawer
   if (!chatDrawer) {
@@ -274,7 +293,6 @@ export function showFullEmojiPicker(
   }
 
   // Position the picker within the chat drawer
-  // Use absolute positioning relative to the drawer
   picker.style.position = "absolute"
   picker.style.top = "50px" // Below the header
   picker.style.left = "50%"
@@ -290,7 +308,53 @@ export function showFullEmojiPicker(
   searchInput?.focus()
 
   // Setup event handlers
-  setupEmojiPickerHandlers(picker, messageId)
+  setupEmojiPickerHandlers(picker)
+
+  // Close on outside click (delayed to avoid immediate close)
+  setTimeout(() => {
+    document.addEventListener("click", handlePickerOutsideClick)
+  }, 0)
+}
+
+// Show emoji picker for inserting emojis into input
+export function showEmojiPickerForInsert(
+  anchorEl: HTMLElement,
+  onSelect: EmojiSelectCallback
+): void {
+  // Close any existing picker or popover
+  closeEmojiPopover()
+  closeEmojiPicker()
+
+  // Set state for insert mode
+  currentPickerMode = "insert"
+  currentPickerMessageId = null
+  currentOnSelectCallback = onSelect
+
+  const picker = createEmojiPickerElement()
+
+  // Append to chat drawer instead of body, so it stays within the drawer
+  if (!chatDrawer) {
+    console.error("Chat drawer not found")
+    return
+  }
+
+  // Position the picker above the input area (bottom of drawer)
+  picker.style.position = "absolute"
+  picker.style.bottom = "70px" // Above the input area
+  picker.style.left = "50%"
+  picker.style.transform = "translateX(-50%)"
+
+  chatDrawer.appendChild(picker)
+  currentEmojiPicker = picker
+
+  // Focus search input
+  const searchInput = picker.querySelector(
+    ".github-chat-emoji-picker-search"
+  ) as HTMLInputElement
+  searchInput?.focus()
+
+  // Setup event handlers
+  setupEmojiPickerHandlers(picker)
 
   // Close on outside click (delayed to avoid immediate close)
   setTimeout(() => {

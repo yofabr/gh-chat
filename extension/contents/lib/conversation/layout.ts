@@ -44,11 +44,18 @@ export function generateConversationLayoutHTML(
     </div>
     <div class="github-chat-input-area">
       <textarea class="github-chat-input" placeholder="Type a message..." rows="1" id="github-chat-input" ${inputDisabled ? "disabled" : ""}></textarea>
-      <button class="github-chat-send" id="github-chat-send" aria-label="Send" ${inputDisabled ? "disabled" : ""}>
-        <svg viewBox="0 0 16 16" width="16" height="16">
-          <path fill="currentColor" d="M.989 8 .064 2.68a1.342 1.342 0 0 1 1.85-1.462l13.402 5.744a1.13 1.13 0 0 1 0 2.076L1.913 14.782a1.343 1.343 0 0 1-1.85-1.463L.99 8Zm.603-5.288L2.38 7.25h4.87a.75.75 0 0 1 0 1.5H2.38l-.788 4.538L13.929 8Z"></path>
-        </svg>
-      </button>
+      <div class="github-chat-input-actions">
+        <button class="github-chat-emoji-btn-input" id="github-chat-emoji-btn" aria-label="Insert emoji" title="Insert emoji" ${inputDisabled ? "disabled" : ""}>
+          <svg viewBox="0 0 16 16" width="16" height="16">
+            <path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm3.82 1.636a.75.75 0 0 1 1.038.175l.007.009c.103.118.22.222.35.31.264.178.683.37 1.285.37.602 0 1.02-.192 1.285-.371.13-.088.247-.192.35-.31l.007-.008a.75.75 0 0 1 1.222.87l-.614-.431c.614.43.614.431.613.431v.001l-.001.002-.002.003-.005.007-.014.019a2.066 2.066 0 0 1-.184.213 2.88 2.88 0 0 1-.534.41c-.435.265-1.07.501-1.922.501-.852 0-1.487-.236-1.922-.501a2.867 2.867 0 0 1-.534-.41 2.048 2.048 0 0 1-.184-.213l-.014-.019-.005-.007-.002-.003v-.002h-.001l.613-.432-.614.43a.75.75 0 0 1 .183-1.044ZM6.5 6.5c0 .552-.448 1-1 1s-1-.448-1-1 .448-1 1-1 1 .448 1 1Zm5 0c0 .552-.448 1-1 1s-1-.448-1-1 .448-1 1-1 1 .448 1 1Z"></path>
+          </svg>
+        </button>
+        <button class="github-chat-send" id="github-chat-send" aria-label="Send" ${inputDisabled ? "disabled" : ""}>
+          <svg viewBox="0 0 16 16" width="16" height="16">
+            <path fill="currentColor" d="M.989 8 .064 2.68a1.342 1.342 0 0 1 1.85-1.462l13.402 5.744a1.13 1.13 0 0 1 0 2.076L1.913 14.782a1.343 1.343 0 0 1-1.85-1.463L.99 8Zm.603-5.288L2.38 7.25h4.87a.75.75 0 0 1 0 1.5H2.38l-.788 4.538L13.929 8Z"></path>
+          </svg>
+        </button>
+      </div>
     </div>
   `
 }
