@@ -11,10 +11,10 @@ import { renderConversationViewAnimated } from "./conversation-view"
 import {
   CACHE_TTL,
   CHAT_LIST_CACHE_TTL,
-  chatDrawer,
   chatListCache,
-  currentUserId,
-  currentView,
+  getChatDrawer,
+  getCurrentUserId,
+  getCurrentView,
   getNavigationCallbacks,
   messageCache,
   setChatListCache
@@ -73,89 +73,148 @@ function updateConversationInList(
   conversationId: string,
   message: Message
 ): void {
-  // Only update if we're on the list view
-  if (currentView !== "list" || !chatDrawer) return
+  try {
+    const currentView = getCurrentView()
+    const chatDrawer = getChatDrawer()
+    const currentUserId = getCurrentUserId()
 
-  // Update the message cache so the conversation shows the new message when opened
-  const cached = messageCache.get(conversationId)
-  if (cached) {
-    // Check if message already exists to avoid duplicates
-    const exists = cached.messages.some((m) => m.id === message.id)
-    if (!exists) {
-      cached.messages.push(message)
-      cached.timestamp = Date.now()
-    }
-  }
+    console.log(
+      "updateConversationInList called:",
+      conversationId,
+      message.content
+    )
+    console.log(
+      "currentView:",
+      currentView,
+      "chatDrawer:",
+      !!chatDrawer,
+      "currentUserId:",
+      currentUserId
+    )
 
-  // Check if this is our own message (don't show unread for sent messages)
-  const isOwnMessage = message.sender_id === currentUserId
-
-  const listItem = chatDrawer.querySelector(
-    `.github-chat-list-item[data-conversation-id="${conversationId}"]`
-  )
-
-  if (listItem) {
-    // Update the preview text
-    const preview = listItem.querySelector(".github-chat-list-preview")
-    if (preview) {
-      preview.textContent = message.content
+    // Only update if we're on the list view
+    if (currentView !== "list" || !chatDrawer) {
+      console.log("Skipping list update - not on list view or no drawer")
+      return
     }
 
-    // Update the time
-    const time = listItem.querySelector(".github-chat-list-time")
-    if (time) {
-      time.textContent = formatRelativeTime(Date.now())
+    // Update the message cache so the conversation shows the new message when opened
+    const cached = messageCache.get(conversationId)
+    if (cached) {
+      // Check if message already exists to avoid duplicates
+      const exists = cached.messages.some((m) => m.id === message.id)
+      if (!exists) {
+        cached.messages.push(message)
+        cached.timestamp = Date.now()
+      }
     }
 
-    // Only show unread badge for messages from others
-    if (!isOwnMessage) {
-      // Increment unread count badge
-      const messageRow = listItem.querySelector(".github-chat-list-message-row")
-      let badge = listItem.querySelector(".github-chat-list-unread-badge")
-      if (badge) {
-        const currentCount = parseInt(badge.textContent || "0") || 0
-        const newCount = currentCount + 1
-        badge.textContent = newCount > 99 ? "99+" : String(newCount)
-      } else if (messageRow) {
-        // Create new badge
-        badge = document.createElement("span")
-        badge.className = "github-chat-list-unread-badge"
-        badge.textContent = "1"
-        messageRow.appendChild(badge)
+    // Check if this is our own message (don't show unread for sent messages)
+    const isOwnMessage = message.sender_id === currentUserId
+
+    // Update the chat list cache as well
+    if (chatListCache && !isOwnMessage) {
+      const cachedChat = chatListCache.chats.find(
+        (c) => c.conversationId === conversationId
+      )
+      if (cachedChat) {
+        cachedChat.lastMessage = message.content
+        cachedChat.lastMessageTime = Date.now()
+        cachedChat.unread = true
+        cachedChat.unreadCount = (cachedChat.unreadCount || 0) + 1
+      }
+    }
+
+    // Find the active view element (last one if multiple during animation)
+    const views = chatDrawer.querySelectorAll(".github-chat-view")
+    const activeView = views.length > 0 ? views[views.length - 1] : chatDrawer
+
+    const listItem = activeView.querySelector(
+      `.github-chat-list-item[data-conversation-id="${conversationId}"]`
+    )
+
+    console.log("Looking for list item with conversationId:", conversationId)
+    console.log("Found listItem:", !!listItem)
+    console.log("Number of views:", views.length)
+
+    if (listItem) {
+      // Update the preview text
+      const preview = listItem.querySelector(".github-chat-list-preview")
+      if (preview) {
+        preview.textContent = message.content
       }
 
-      // Add unread class
-      listItem.classList.add("unread")
-
-      // Also update the header unread badge
-      const nav = getNavigationCallbacks()
-      nav?.refreshUnreadBadge()
-    }
-
-    // Move to top of list
-    const chatList = chatDrawer.querySelector(".github-chat-list")
-    if (chatList && listItem.parentElement === chatList) {
-      chatList.insertBefore(listItem, chatList.firstChild)
-    }
-  } else {
-    // Conversation not in list - refresh the whole list
-    getAllChats().then((freshChats) => {
-      const viewEl =
-        chatDrawer?.querySelector(".github-chat-view") || chatDrawer
-      if (viewEl) {
-        viewEl.innerHTML = generateListViewInnerHTML(freshChats)
-        setupListViewEventListeners(freshChats, viewEl as Element)
+      // Update the time
+      const time = listItem.querySelector(".github-chat-list-time")
+      if (time) {
+        time.textContent = formatRelativeTime(Date.now())
       }
-      // Update header badge
-      const nav = getNavigationCallbacks()
-      nav?.refreshUnreadBadge()
-    })
+
+      // Only show unread badge for messages from others
+      if (!isOwnMessage) {
+        // Increment unread count badge
+        const messageRow = listItem.querySelector(
+          ".github-chat-list-message-row"
+        )
+        let badge = listItem.querySelector(".github-chat-list-unread-badge")
+        if (badge) {
+          const currentCount = parseInt(badge.textContent || "0") || 0
+          const newCount = currentCount + 1
+          badge.textContent = newCount > 99 ? "99+" : String(newCount)
+        } else if (messageRow) {
+          // Create new badge
+          badge = document.createElement("span")
+          badge.className = "github-chat-list-unread-badge"
+          badge.textContent = "1"
+          messageRow.appendChild(badge)
+        }
+
+        // Add unread class
+        listItem.classList.add("unread")
+
+        // Also update the header unread badge
+        const nav = getNavigationCallbacks()
+        nav?.refreshUnreadBadge()
+      }
+
+      // Move to top of list
+      const chatList = activeView.querySelector(".github-chat-list")
+      if (chatList && listItem.parentElement === chatList) {
+        chatList.insertBefore(listItem, chatList.firstChild)
+      }
+    } else {
+      console.log("List item not found, refreshing whole list")
+      // Conversation not in list - refresh the whole list
+      getAllChats().then((freshChats) => {
+        // Get fresh reference to active view
+        const views = getChatDrawer()?.querySelectorAll(".github-chat-view")
+        const viewEl =
+          views && views.length > 0 ? views[views.length - 1] : getChatDrawer()
+        if (viewEl) {
+          viewEl.innerHTML = generateListViewInnerHTML(freshChats)
+          setupListViewEventListeners(freshChats, viewEl as Element)
+        }
+        // Update header badge
+        const nav = getNavigationCallbacks()
+        nav?.refreshUnreadBadge()
+      })
+    }
+  } catch (error) {
+    console.error("Error in updateConversationInList:", error)
   }
 }
 
 // Start listening for new messages to update the list
 export function startListMessageListener(): void {
+  console.log(
+    "startListMessageListener called - setting global message listener"
+  )
   setGlobalMessageListener((conversationId, message) => {
+    console.log(
+      "Global message listener triggered:",
+      conversationId,
+      message.content
+    )
     updateConversationInList(conversationId, message)
   })
 }
@@ -221,7 +280,7 @@ export function setupListViewEventListeners(
   chats: ChatPreview[],
   container?: Element
 ): void {
-  const root = container || chatDrawer
+  const root = container || getChatDrawer()
   if (!root) return
 
   const closeBtn = root.querySelector(".github-chat-close")
@@ -250,6 +309,7 @@ export function setupListViewEventListeners(
 
 // Render list view inside the drawer
 export async function renderListView(): Promise<void> {
+  const chatDrawer = getChatDrawer()
   if (!chatDrawer) return
 
   // Start listening for new messages
@@ -268,8 +328,9 @@ export async function renderListView(): Promise<void> {
 
     // Refresh in background
     getAllChats().then((freshChats) => {
-      if (chatDrawer) {
-        chatDrawer.innerHTML = generateListViewInnerHTML(freshChats)
+      const drawer = getChatDrawer()
+      if (drawer) {
+        drawer.innerHTML = generateListViewInnerHTML(freshChats)
         setupListViewEventListeners(freshChats)
       }
     })
@@ -308,6 +369,7 @@ export async function renderListView(): Promise<void> {
 
 // Render list view with animation (uses cache for instant display)
 export function renderListViewAnimated(animationClass: string): void {
+  const chatDrawer = getChatDrawer()
   if (!chatDrawer) return
 
   // Start listening for new messages
