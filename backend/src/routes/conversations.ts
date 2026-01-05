@@ -358,11 +358,44 @@ conversations.get("/:id/messages", async (c) => {
     `;
   }
 
+  // Fetch reactions for all messages
+  const messageIds = messages.map((m: any) => m.id);
+  let reactions: any[] = [];
+  if (messageIds.length > 0) {
+    reactions = await sql`
+      SELECT mr.message_id, mr.emoji, mr.user_id, u.username
+      FROM message_reactions mr
+      JOIN users u ON mr.user_id = u.id
+      WHERE mr.message_id = ANY(${messageIds}::uuid[])
+      ORDER BY mr.created_at ASC
+    `;
+  }
+
+  // Group reactions by message_id
+  const reactionsByMessage = new Map<string, any[]>();
+  for (const r of reactions) {
+    const msgId = r.message_id;
+    if (!reactionsByMessage.has(msgId)) {
+      reactionsByMessage.set(msgId, []);
+    }
+    reactionsByMessage.get(msgId)!.push({
+      emoji: r.emoji,
+      user_id: r.user_id,
+      username: r.username,
+    });
+  }
+
+  // Attach reactions to messages
+  const messagesWithReactions = messages.map((m: any) => ({
+    ...m,
+    reactions: reactionsByMessage.get(m.id) || [],
+  }));
+
   // Check if there are more messages before the oldest one we fetched
   const hasMore = messages.length === limit;
 
   // Reverse to get chronological order
-  return c.json({ messages: messages.reverse(), hasMore });
+  return c.json({ messages: messagesWithReactions.reverse(), hasMore });
 });
 
 // Send a message
@@ -465,6 +498,139 @@ conversations.post("/:id/read", async (c) => {
   `;
 
   return c.json({ success: true });
+});
+
+// Add a reaction to a message
+conversations.post("/:id/messages/:messageId/reactions", async (c) => {
+  const user = c.get("user");
+  const conversationId = c.req.param("id");
+  const messageId = c.req.param("messageId");
+  const body = await c.req.json();
+  const emoji = body.emoji?.trim();
+
+  if (!emoji || typeof emoji !== "string") {
+    return c.json({ error: "Emoji is required" }, 400);
+  }
+
+  // Verify user is part of this conversation
+  const convCheck = await sql`
+    SELECT id, user1_id, user2_id FROM conversations
+    WHERE id = ${conversationId}::uuid 
+    AND (user1_id = ${user.user_id} OR user2_id = ${user.user_id})
+  `;
+
+  if (convCheck.length === 0) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  // Verify message exists in this conversation
+  const msgCheck = await sql`
+    SELECT id FROM messages
+    WHERE id = ${messageId}::uuid AND conversation_id = ${conversationId}::uuid
+  `;
+
+  if (msgCheck.length === 0) {
+    return c.json({ error: "Message not found" }, 404);
+  }
+
+  // Insert reaction (upsert - ignore if already exists)
+  try {
+    await sql`
+      INSERT INTO message_reactions (message_id, user_id, emoji)
+      VALUES (${messageId}::uuid, ${user.user_id}, ${emoji})
+      ON CONFLICT (message_id, user_id, emoji) DO NOTHING
+    `;
+  } catch (error) {
+    console.error("Failed to add reaction:", error);
+    return c.json({ error: "Failed to add reaction" }, 500);
+  }
+
+  const conversation = convCheck[0];
+  const otherUserId =
+    conversation.user1_id === user.user_id
+      ? conversation.user2_id
+      : conversation.user1_id;
+
+  // Broadcast reaction to conversation participants
+  const reactionData = {
+    type: "reaction_added",
+    conversationId,
+    messageId,
+    emoji,
+    user_id: user.user_id,
+    username: user.username,
+  };
+
+  // Send to conversation (for users actively viewing this conversation)
+  broadcastToConversation(conversationId, reactionData);
+
+  // Also send to both users directly (in case they're on the list view, not in this conversation)
+  // Use the user's ID to ensure they get the update even if not in the conversation view
+  broadcastToUser(user.user_id, reactionData);
+  if (otherUserId && otherUserId !== user.user_id) {
+    broadcastToUser(otherUserId, reactionData);
+  }
+
+  return c.json({ success: true, emoji, messageId });
+});
+
+// Remove a reaction from a message
+conversations.delete("/:id/messages/:messageId/reactions/:emoji", async (c) => {
+  const user = c.get("user");
+  const conversationId = c.req.param("id");
+  const messageId = c.req.param("messageId");
+  const emoji = decodeURIComponent(c.req.param("emoji"));
+
+  // Verify user is part of this conversation
+  const convCheck = await sql`
+    SELECT id, user1_id, user2_id FROM conversations
+    WHERE id = ${conversationId}::uuid 
+    AND (user1_id = ${user.user_id} OR user2_id = ${user.user_id})
+  `;
+
+  if (convCheck.length === 0) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  // Delete the reaction
+  const deleted = await sql`
+    DELETE FROM message_reactions
+    WHERE message_id = ${messageId}::uuid 
+      AND user_id = ${user.user_id} 
+      AND emoji = ${emoji}
+    RETURNING id
+  `;
+
+  if (deleted.length === 0) {
+    return c.json({ error: "Reaction not found" }, 404);
+  }
+
+  const conversation = convCheck[0];
+  const otherUserId =
+    conversation.user1_id === user.user_id
+      ? conversation.user2_id
+      : conversation.user1_id;
+
+  // Broadcast reaction removal to conversation participants
+  const reactionData = {
+    type: "reaction_removed",
+    conversationId,
+    messageId,
+    emoji,
+    user_id: user.user_id,
+    username: user.username,
+  };
+
+  // Send to conversation (for users actively viewing this conversation)
+  broadcastToConversation(conversationId, reactionData);
+
+  // Also send to both users directly (in case they're on the list view, not in this conversation)
+  broadcastToUser(user.user_id, reactionData);
+  if (otherUserId && otherUserId !== user.user_id) {
+    broadcastToUser(otherUserId, reactionData);
+  }
+
+  return c.json({ success: true, emoji, messageId });
 });
 
 export default conversations;
