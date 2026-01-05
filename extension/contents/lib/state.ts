@@ -55,6 +55,10 @@ export function setChatDrawer(el: HTMLElement | null) {
   chatDrawer = el
 }
 
+export function getChatDrawer(): HTMLElement | null {
+  return chatDrawer
+}
+
 export function setChatOverlay(el: HTMLElement | null) {
   chatOverlay = el
 }
@@ -63,8 +67,16 @@ export function setCurrentConversationId(id: string | null) {
   currentConversationId = id
 }
 
+export function getCurrentConversationId(): string | null {
+  return currentConversationId
+}
+
 export function setCurrentUserId(id: string | null) {
   currentUserId = id
+}
+
+export function getCurrentUserId(): string | null {
+  return currentUserId
 }
 
 export function setWsCleanup(cleanup: (() => void) | null) {
@@ -83,6 +95,10 @@ export function setTypingTimeout(
 
 export function setCurrentView(view: "list" | "conversation") {
   currentView = view
+}
+
+export function getCurrentView(): "list" | "conversation" {
+  return currentView
 }
 
 export function setCurrentOtherUser(user: CurrentOtherUser | null) {
