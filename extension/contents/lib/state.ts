@@ -60,6 +60,15 @@ export type QuotedMessage = {
 
 export let quotedMessage: QuotedMessage = null
 
+// Edit message state
+export type EditingMessage = {
+  id: string
+  content: string
+  createdAt: string
+} | null
+
+export let editingMessage: EditingMessage = null
+
 // State setters
 export function setChatDrawer(el: HTMLElement | null) {
   chatDrawer = el
@@ -140,4 +149,17 @@ export function getQuotedMessage(): QuotedMessage {
 
 export function clearQuotedMessage() {
   quotedMessage = null
+}
+
+// Edit message state management
+export function setEditingMessage(message: EditingMessage) {
+  editingMessage = message
+}
+
+export function getEditingMessage(): EditingMessage {
+  return editingMessage
+}
+
+export function clearEditingMessage() {
+  editingMessage = null
 }

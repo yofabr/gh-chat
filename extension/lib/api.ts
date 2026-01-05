@@ -132,6 +132,7 @@ export interface Message {
   reactions?: Reaction[]
   reply_to_id?: string
   reply_to?: ReplyTo | null
+  edited_at?: string | null
 }
 
 export interface OtherUser {
@@ -273,6 +274,57 @@ export async function sendMessage(
   }
 }
 
+// Edit a message (only within 1 hour of sending)
+export async function editMessage(
+  conversationId: string,
+  messageId: string,
+  content: string
+): Promise<{ success: boolean; error?: string; message?: Message }> {
+  try {
+    const response = await fetchWithAuth(
+      `/conversations/${conversationId}/messages/${messageId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ content })
+      }
+    )
+
+    if (!response.ok) {
+      const data = await response.json()
+      return { success: false, error: data.error || "Failed to edit message" }
+    }
+
+    const data = await response.json()
+    return { success: true, message: data.message }
+  } catch {
+    return { success: false, error: "Network error" }
+  }
+}
+
+// Delete a message (soft delete)
+export async function deleteMessage(
+  conversationId: string,
+  messageId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetchWithAuth(
+      `/conversations/${conversationId}/messages/${messageId}`,
+      {
+        method: "DELETE"
+      }
+    )
+
+    if (!response.ok) {
+      const data = await response.json()
+      return { success: false, error: data.error || "Failed to delete message" }
+    }
+
+    return { success: true }
+  } catch {
+    return { success: false, error: "Network error" }
+  }
+}
+
 // Mark a conversation as read
 export async function markConversationAsRead(
   conversationId: string
@@ -345,6 +397,10 @@ let reactionCallback:
       userId: string,
       username: string
     ) => void)
+  | null = null
+let messageDeletedCallback: ((messageId: string) => void) | null = null
+let messageEditedCallback:
+  | ((messageId: string, content: string, editedAt: string) => void)
   | null = null
 
 // Global callback for any new message (used to update conversation list)
@@ -480,6 +536,26 @@ function connectWebSocket(token: string): Promise<void> {
             )
           }
         }
+
+        // Handle message deleted event
+        if (data.type === "message_deleted" && messageDeletedCallback) {
+          if (
+            !data.conversationId ||
+            data.conversationId === currentConversationId
+          ) {
+            messageDeletedCallback(data.messageId)
+          }
+        }
+
+        // Handle message edited event
+        if (data.type === "message_edited" && messageEditedCallback) {
+          if (
+            !data.conversationId ||
+            data.conversationId === currentConversationId
+          ) {
+            messageEditedCallback(data.messageId, data.content, data.edited_at)
+          }
+        }
       } catch (e) {
         console.error("WebSocket message parse error:", e)
       }
@@ -518,6 +594,12 @@ export interface ConversationCallbacks {
     userId: string,
     username: string
   ) => void
+  onMessageDeleted?: (messageId: string) => void
+  onMessageEdited?: (
+    messageId: string,
+    content: string,
+    editedAt: string
+  ) => void
 }
 
 // Join a conversation for real-time updates
@@ -535,6 +617,8 @@ export async function joinConversation(
   stopTypingCallback = callbacks.onStopTyping || null
   messagesReadCallback = callbacks.onMessagesRead || null
   reactionCallback = callbacks.onReaction || null
+  messageDeletedCallback = callbacks.onMessageDeleted || null
+  messageEditedCallback = callbacks.onMessageEdited || null
   currentConversationId = conversationId
 
   // Connect if not connected
@@ -564,6 +648,8 @@ export async function joinConversation(
             stopTypingCallback = null
             messagesReadCallback = null
             reactionCallback = null
+            messageDeletedCallback = null
+            messageEditedCallback = null
             currentConversationId = null
           })
           return
@@ -645,5 +731,8 @@ export function disconnectWebSocket() {
   typingCallback = null
   stopTypingCallback = null
   messagesReadCallback = null
+  reactionCallback = null
+  messageDeletedCallback = null
+  messageEditedCallback = null
   currentConversationId = null
 }

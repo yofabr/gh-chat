@@ -61,7 +61,9 @@ export {
 export {
   setupInputHandlers,
   showQuotePreview,
-  hideQuotePreview
+  hideQuotePreview,
+  showEditPreview,
+  hideEditPreview
 } from "./input-handler"
 
 // WebSocket handling

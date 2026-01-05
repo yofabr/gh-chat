@@ -83,6 +83,32 @@ export async function initDb() {
     END $$;
   `;
 
+  // Add edited_at column if it doesn't exist (for message editing)
+  await sql`
+    DO $$ 
+    BEGIN 
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'messages' AND column_name = 'edited_at'
+      ) THEN 
+        ALTER TABLE messages ADD COLUMN edited_at TIMESTAMP;
+      END IF;
+    END $$;
+  `;
+
+  // Add deleted_at column if it doesn't exist (for soft delete)
+  await sql`
+    DO $$ 
+    BEGIN 
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'messages' AND column_name = 'deleted_at'
+      ) THEN 
+        ALTER TABLE messages ADD COLUMN deleted_at TIMESTAMP;
+      END IF;
+    END $$;
+  `;
+
   // Create conversation_reads table (tracks when user last read each conversation)
   await sql`
     CREATE TABLE IF NOT EXISTS conversation_reads (

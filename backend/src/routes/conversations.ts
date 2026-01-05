@@ -75,12 +75,14 @@ conversations.get("/", async (c) => {
       (
         SELECT content FROM messages 
         WHERE conversation_id = c.id 
+        AND deleted_at IS NULL
         ORDER BY created_at DESC 
         LIMIT 1
       ) as last_message,
       (
         SELECT created_at FROM messages 
         WHERE conversation_id = c.id 
+        AND deleted_at IS NULL
         ORDER BY created_at DESC 
         LIMIT 1
       ) as last_message_time,
@@ -88,6 +90,7 @@ conversations.get("/", async (c) => {
         SELECT COUNT(*)::integer FROM messages m
         WHERE m.conversation_id = c.id 
         AND m.sender_id != ${user.user_id}
+        AND m.deleted_at IS NULL
         AND m.created_at > COALESCE(
           (SELECT last_read_at FROM conversation_reads 
            WHERE user_id = ${user.user_id} AND conversation_id = c.id),
@@ -116,6 +119,7 @@ conversations.get("/unread-count", async (c) => {
       JOIN conversations c ON m.conversation_id = c.id
       WHERE (c.user1_id = ${user.user_id} OR c.user2_id = ${user.user_id})
         AND m.sender_id != ${user.user_id}
+        AND m.deleted_at IS NULL
         AND m.created_at > COALESCE(
           (SELECT last_read_at FROM conversation_reads 
            WHERE user_id = ${user.user_id} AND conversation_id = c.id),
@@ -337,22 +341,24 @@ conversations.get("/:id/messages", async (c) => {
     // Use subquery to avoid timezone issues when passing Date objects back to PostgreSQL
     // This handles messages with the same timestamp correctly using (created_at, id) tuple comparison
     messages = await sql`
-      SELECT m.id, m.content, m.created_at, m.read_at, m.sender_id, m.reply_to_id,
+      SELECT m.id, m.content, m.created_at, m.read_at, m.sender_id, m.reply_to_id, m.edited_at,
              u.username as sender_username, u.display_name as sender_display_name, u.avatar_url as sender_avatar
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       WHERE m.conversation_id = ${conversationId}::uuid 
+        AND m.deleted_at IS NULL
         AND (m.created_at, m.id) < (SELECT created_at, id FROM messages WHERE id = ${before}::uuid)
       ORDER BY m.created_at DESC, m.id DESC
       LIMIT ${limit}
     `;
   } else {
     messages = await sql`
-      SELECT m.id, m.content, m.created_at, m.read_at, m.sender_id, m.reply_to_id,
+      SELECT m.id, m.content, m.created_at, m.read_at, m.sender_id, m.reply_to_id, m.edited_at,
              u.username as sender_username, u.display_name as sender_display_name, u.avatar_url as sender_avatar
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       WHERE m.conversation_id = ${conversationId}::uuid
+        AND m.deleted_at IS NULL
       ORDER BY m.created_at DESC, m.id DESC
       LIMIT ${limit}
     `;
@@ -415,6 +421,7 @@ conversations.get("/:id/messages", async (c) => {
     ...m,
     reactions: reactionsByMessage.get(m.id) || [],
     reply_to: m.reply_to_id ? replyToMap.get(m.reply_to_id) || null : null,
+    edited_at: m.edited_at || null,
   }));
 
   // Check if there are more messages before the oldest one we fetched
@@ -530,6 +537,128 @@ conversations.post("/:id/messages", async (c) => {
   }
 
   return c.json({ message: messageData });
+});
+
+// Edit a message (only within 1 hour of sending)
+conversations.patch("/:id/messages/:messageId", async (c) => {
+  const user = c.get("user");
+  const conversationId = c.req.param("id");
+  const messageId = c.req.param("messageId");
+  const body = await c.req.json();
+  const content = body.content?.trim();
+
+  if (!content || typeof content !== "string" || content.trim().length === 0) {
+    return c.json({ error: "Message content is required" }, 400);
+  }
+
+  if (content.length > 5000) {
+    return c.json({ error: "Message too long (max 5000 characters)" }, 400);
+  }
+
+  // Verify the message exists, belongs to this user, is in this conversation, and is within 1 hour
+  const msgCheck = await sql`
+    SELECT id, sender_id, created_at, deleted_at FROM messages
+    WHERE id = ${messageId}::uuid 
+    AND conversation_id = ${conversationId}::uuid
+  `;
+
+  if (msgCheck.length === 0) {
+    return c.json({ error: "Message not found" }, 404);
+  }
+
+  const message = msgCheck[0];
+
+  if (message.deleted_at) {
+    return c.json({ error: "Message has been deleted" }, 400);
+  }
+
+  if (message.sender_id !== user.user_id) {
+    return c.json({ error: "You can only edit your own messages" }, 403);
+  }
+
+  // Check if message is within 24 hours of creation
+  const createdAt = new Date(message.created_at);
+  const now = new Date();
+  const hourInMs = 60 * 60 * 1000;
+  const windowMs = 24 * hourInMs; // 24 hours
+  if (now.getTime() - createdAt.getTime() > windowMs) {
+    return c.json(
+      { error: "Messages can only be edited within 24 hours of sending" },
+      400,
+    );
+  }
+
+  // Update the message
+  const updated = await sql`
+    UPDATE messages 
+    SET content = ${content}, edited_at = NOW()
+    WHERE id = ${messageId}::uuid
+    RETURNING id, content, created_at, edited_at, sender_id
+  `;
+
+  const updatedMessage = updated[0];
+
+  // Broadcast the edit to all users in the conversation
+  broadcastToConversation(conversationId, {
+    type: "message_edited",
+    conversationId: conversationId,
+    messageId: messageId,
+    content: updatedMessage.content,
+    edited_at: updatedMessage.edited_at,
+  });
+
+  return c.json({
+    message: {
+      id: updatedMessage.id,
+      content: updatedMessage.content,
+      created_at: updatedMessage.created_at,
+      edited_at: updatedMessage.edited_at,
+    },
+  });
+});
+
+// Delete a message (soft delete)
+conversations.delete("/:id/messages/:messageId", async (c) => {
+  const user = c.get("user");
+  const conversationId = c.req.param("id");
+  const messageId = c.req.param("messageId");
+
+  // Verify the message exists, belongs to this user, and is in this conversation
+  const msgCheck = await sql`
+    SELECT id, sender_id, deleted_at FROM messages
+    WHERE id = ${messageId}::uuid 
+    AND conversation_id = ${conversationId}::uuid
+  `;
+
+  if (msgCheck.length === 0) {
+    return c.json({ error: "Message not found" }, 404);
+  }
+
+  const message = msgCheck[0];
+
+  if (message.deleted_at) {
+    return c.json({ error: "Message already deleted" }, 400);
+  }
+
+  if (message.sender_id !== user.user_id) {
+    return c.json({ error: "You can only delete your own messages" }, 403);
+  }
+
+  // Soft delete the message
+  await sql`
+    UPDATE messages 
+    SET deleted_at = NOW()
+    WHERE id = ${messageId}::uuid
+  `;
+
+  // Broadcast the deletion to all users in the conversation
+  broadcastToConversation(conversationId, {
+    type: "message_deleted",
+    conversationId: conversationId,
+    messageId: messageId,
+  });
+
+  return c.json({ success: true });
 });
 
 // Mark conversation as read (update last_read_at timestamp)

@@ -136,6 +136,73 @@ export async function setupWebSocketHandler(
           type === "added",
           currentUserId
         )
+      },
+
+      onMessageDeleted: (messageId: string) => {
+        // Remove from DOM
+        const msgEl = container.querySelector(
+          `[data-message-id="${messageId}"]`
+        )
+        if (msgEl) {
+          msgEl.remove()
+        }
+
+        // Remove from cache
+        const cachedData = messageCache.get(conversationId)
+        if (cachedData) {
+          cachedData.messages = cachedData.messages.filter(
+            (m) => m.id !== messageId
+          )
+          cachedData.timestamp = Date.now()
+        }
+
+        // Check if messages container is now empty
+        const msgContainer = container.querySelector("#github-chat-messages")
+        const remainingMessages = msgContainer?.querySelectorAll(
+          ".github-chat-message"
+        )
+        if (remainingMessages?.length === 0) {
+          const emptyState = document.createElement("div")
+          emptyState.className = "github-chat-empty"
+          emptyState.textContent = "No messages yet. Say hello!"
+          msgContainer?.appendChild(emptyState)
+        }
+      },
+
+      onMessageEdited: (messageId: string, newContent: string) => {
+        // Update in DOM
+        const msgEl = container.querySelector(
+          `[data-message-id="${messageId}"]`
+        )
+        if (msgEl) {
+          const bubbleEl = msgEl.querySelector(".github-chat-bubble")
+          if (bubbleEl) {
+            bubbleEl.textContent = newContent
+          }
+
+          // Add edited indicator if not present
+          const metaEl = msgEl.querySelector(".github-chat-meta")
+          if (metaEl && !metaEl.querySelector(".github-chat-edited")) {
+            const timeEl = metaEl.querySelector(".github-chat-time")
+            if (timeEl) {
+              const editedSpan = document.createElement("span")
+              editedSpan.className = "github-chat-edited"
+              editedSpan.textContent = "(edited)"
+              timeEl.insertAdjacentElement("afterend", editedSpan)
+            }
+          }
+        }
+
+        // Update in cache
+        const cachedData = messageCache.get(conversationId)
+        if (cachedData) {
+          const msg = cachedData.messages.find((m) => m.id === messageId)
+          if (msg) {
+            msg.content = newContent
+            msg.edited_at = new Date().toISOString()
+          }
+          cachedData.timestamp = Date.now()
+        }
       }
     })
 

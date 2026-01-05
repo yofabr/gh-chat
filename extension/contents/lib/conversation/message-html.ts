@@ -85,18 +85,28 @@ export function generateMessageHTML(
   statusIcon: string = "",
   reactions: Reaction[] = [],
   currentUserIdVal: string | null = null,
-  replyTo?: ReplyTo | null
+  replyTo?: ReplyTo | null,
+  editedAt?: string | null
 ): string {
   const timeStr =
     typeof timestamp === "string"
       ? formatTime(new Date(timestamp).getTime())
       : formatTime(timestamp)
 
+  // Store the original timestamp for edit window checking
+  const createdAtStr =
+    typeof timestamp === "string"
+      ? timestamp
+      : new Date(timestamp).toISOString()
+
   const reactionsHTML = generateReactionsHTML(reactions, currentUserIdVal)
   const quotedHTML = generateQuotedContentHTML(replyTo)
+  const editedHTML = editedAt
+    ? '<span class="github-chat-edited">(edited)</span>'
+    : ""
 
   return `
-    <div class="github-chat-message ${isSent ? "sent" : "received"}" data-message-id="${messageId}">
+    <div class="github-chat-message ${isSent ? "sent" : "received"}" data-message-id="${messageId}" data-created-at="${createdAtStr}">
       <div class="github-chat-message-wrapper">
         <div class="github-chat-message-actions">
           <button class="github-chat-action-btn" data-action="reaction" title="Add reaction">
@@ -110,6 +120,7 @@ export function generateMessageHTML(
       </div>
       ${reactionsHTML}
       <div class="github-chat-meta">
+        ${editedHTML}
         <span class="github-chat-time">${timeStr}</span>
         ${statusIcon}
       </div>

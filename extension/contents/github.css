@@ -1314,3 +1314,131 @@
 .github-chat-message.sent .github-chat-quoted-text {
   color: rgba(255, 255, 255, 0.7);
 }
+
+/* Edit Preview Bar (above input, Twitter-style) */
+.github-chat-edit-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #161b22;
+  border-top: 1px solid #30363d;
+  border-left: 3px solid #f0883e;
+  margin: 0;
+}
+
+.github-chat-edit-preview-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  color: #f0883e;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.github-chat-edit-preview-content svg {
+  flex-shrink: 0;
+}
+
+.github-chat-edit-preview-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.github-chat-edit-preview-close:hover {
+  background: #30363d;
+  color: #e6edf3;
+}
+
+/* Edited Indicator */
+.github-chat-edited {
+  font-size: 11px;
+  color: #8b949e;
+  margin-right: 4px;
+}
+
+/* Options Menu Danger Item (Delete) */
+.github-chat-options-item-danger {
+  color: #f85149;
+}
+
+.github-chat-options-item-danger:hover {
+  background: rgba(248, 81, 73, 0.1);
+}
+
+/* Confirmation Dialog */
+.github-chat-confirm-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10010;
+}
+
+.github-chat-confirm-dialog {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 300px;
+  width: calc(100% - 40px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.github-chat-confirm-message {
+  margin: 0 0 16px 0;
+  color: #e6edf3;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.github-chat-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.github-chat-confirm-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s ease;
+}
+
+.github-chat-confirm-cancel {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+.github-chat-confirm-cancel:hover {
+  background: #30363d;
+}
+
+.github-chat-confirm-delete {
+  background: #da3633;
+  color: #fff;
+}
+
+.github-chat-confirm-delete:hover {
+  background: #f85149;
+}

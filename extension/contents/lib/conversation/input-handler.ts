@@ -1,14 +1,17 @@
 // Input handling for conversation view - textarea, typing, sending messages
 
 import {
+  editMessage as apiEditMessage,
   sendMessage as apiSendMessage,
   sendStopTyping,
   sendTypingIndicator
 } from "~lib/api"
 
 import {
+  clearEditingMessage,
   clearQuotedMessage,
   currentConversationId,
+  getEditingMessage,
   getQuotedMessage,
   incrementPendingMessageId,
   messageCache,
@@ -28,8 +31,9 @@ export function showQuotePreview(
   const inputArea = document.querySelector(".github-chat-input-area")
   if (!inputArea) return
 
-  // Remove existing preview if any
+  // Remove existing previews
   hideQuotePreview()
+  hideEditPreview()
 
   // Create preview bar
   const preview = document.createElement("div")
@@ -60,6 +64,57 @@ export function showQuotePreview(
 // Hide quote preview bar
 export function hideQuotePreview(): void {
   const existing = document.querySelector(".github-chat-quote-preview")
+  existing?.remove()
+}
+
+// Show edit preview bar above input (Twitter-style)
+export function showEditPreview(content: string): void {
+  const inputArea = document.querySelector(".github-chat-input-area")
+  if (!inputArea) return
+
+  // Remove existing previews
+  hideQuotePreview()
+  hideEditPreview()
+
+  // Create edit preview bar
+  const preview = document.createElement("div")
+  preview.className = "github-chat-edit-preview"
+  preview.innerHTML = `
+    <div class="github-chat-edit-preview-content">
+      <svg viewBox="0 0 16 16" width="14" height="14">
+        <path fill="currentColor" d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"></path>
+      </svg>
+      <span>Edit message</span>
+    </div>
+    <button class="github-chat-edit-preview-close" aria-label="Cancel edit">
+      <svg viewBox="0 0 16 16" width="12" height="12">
+        <path fill="currentColor" d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
+      </svg>
+    </button>
+  `
+
+  // Insert before input area
+  inputArea.parentNode?.insertBefore(preview, inputArea)
+
+  // Setup close button
+  const closeBtn = preview.querySelector(".github-chat-edit-preview-close")
+  closeBtn?.addEventListener("click", () => {
+    clearEditingMessage()
+    hideEditPreview()
+    // Clear input
+    const input = document.getElementById(
+      "github-chat-input"
+    ) as HTMLTextAreaElement
+    if (input) {
+      input.value = ""
+      input.style.height = "auto"
+    }
+  })
+}
+
+// Hide edit preview bar
+export function hideEditPreview(): void {
+  const existing = document.querySelector(".github-chat-edit-preview")
   existing?.remove()
 }
 
@@ -154,6 +209,14 @@ async function handleSendMessage(
   }
   sendStopTyping()
 
+  // Check if we're in edit mode
+  const editingMsg = getEditingMessage()
+  if (editingMsg) {
+    // Handle edit submission
+    await handleEditMessage(editingMsg.id, text, input)
+    return
+  }
+
   // Get quoted message if replying
   const quotedMsg = getQuotedMessage()
   const replyToId = quotedMsg?.id || undefined
@@ -189,6 +252,9 @@ async function handleSendMessage(
   const messageEl = document.createElement("div")
   messageEl.className = "github-chat-message sent"
   messageEl.id = tempId
+  // Set a temporary created_at for edit window calculation (will be updated on success)
+  const tempCreatedAt = new Date().toISOString()
+  messageEl.setAttribute("data-created-at", tempCreatedAt)
   const pendingStatusIcon = `<span class="github-chat-status pending">${STATUS_ICONS.pending}</span>`
   messageEl.innerHTML = `
     <div class="github-chat-message-wrapper">
@@ -223,6 +289,7 @@ async function handleSendMessage(
     if (sentMessage) {
       // Success - update to sent status
       pendingEl.setAttribute("data-message-id", sentMessage.id.toString())
+      pendingEl.setAttribute("data-created-at", sentMessage.created_at)
       pendingEl.removeAttribute("id")
       const statusEl = pendingEl.querySelector(".github-chat-status")
       if (statusEl) {
@@ -243,5 +310,76 @@ async function handleSendMessage(
         statusEl.innerHTML = STATUS_ICONS.failed
       }
     }
+  }
+}
+
+// Handle editing an existing message
+async function handleEditMessage(
+  messageId: string,
+  newContent: string,
+  input: HTMLTextAreaElement
+): Promise<void> {
+  if (!currentConversationId) return
+
+  // Clear edit state and preview
+  clearEditingMessage()
+  hideEditPreview()
+
+  // Clear input
+  input.value = ""
+  input.style.height = "auto"
+
+  // Call API to edit message
+  const result = await apiEditMessage(
+    currentConversationId,
+    messageId,
+    newContent
+  )
+
+  if (result.success) {
+    // Update message in DOM
+    const messageEl = document.querySelector(`[data-message-id="${messageId}"]`)
+    if (messageEl) {
+      const bubbleEl = messageEl.querySelector(".github-chat-bubble")
+      if (bubbleEl) {
+        // Preserve quoted content if present
+        const quotedContent = bubbleEl.querySelector(
+          ".github-chat-quoted-content"
+        )
+        const quotedHtml = quotedContent ? quotedContent.outerHTML : ""
+        bubbleEl.innerHTML = quotedHtml + escapeHtml(newContent)
+      }
+
+      // Add/update edited indicator in meta
+      const metaEl = messageEl.querySelector(".github-chat-meta")
+      if (metaEl) {
+        let editedSpan = metaEl.querySelector(".github-chat-edited")
+        if (!editedSpan) {
+          editedSpan = document.createElement("span")
+          editedSpan.className = "github-chat-edited"
+          editedSpan.textContent = "(edited)"
+          // Insert before time
+          const timeEl = metaEl.querySelector(".github-chat-time")
+          if (timeEl) {
+            metaEl.insertBefore(editedSpan, timeEl)
+          } else {
+            metaEl.appendChild(editedSpan)
+          }
+        }
+      }
+    }
+
+    // Update cache
+    const cachedData = messageCache.get(currentConversationId)
+    if (cachedData) {
+      const msgIndex = cachedData.messages.findIndex((m) => m.id === messageId)
+      if (msgIndex !== -1) {
+        cachedData.messages[msgIndex].content = newContent
+        cachedData.messages[msgIndex].edited_at = new Date().toISOString()
+      }
+    }
+  } else {
+    // Show error - could add a toast here
+    console.error("Failed to edit message:", result.error)
   }
 }
