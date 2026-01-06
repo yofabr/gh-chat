@@ -791,6 +791,46 @@
   border-bottom-left-radius: 4px;
 }
 
+/* Message Content Formatting */
+.github-chat-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.github-chat-link:hover {
+  opacity: 0.8;
+}
+
+.github-chat-message.sent .github-chat-link {
+  color: #fff;
+}
+
+.github-chat-message.received .github-chat-link {
+  color: #58a6ff;
+}
+
+.github-chat-code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    monospace;
+  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.github-chat-message.received .github-chat-code {
+  background: rgba(110, 118, 129, 0.3);
+}
+
+.github-chat-bold {
+  font-weight: 600;
+}
+
+.github-chat-italic {
+  font-style: italic;
+}
+
 /* Message Reactions Display */
 .github-chat-reactions {
   display: inline-flex;
