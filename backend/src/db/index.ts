@@ -109,6 +109,19 @@ export async function initDb() {
     END $$;
   `;
 
+  // Add last_seen_at column to users table (for online status tracking)
+  await sql`
+    DO $$ 
+    BEGIN 
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name = 'last_seen_at'
+      ) THEN 
+        ALTER TABLE users ADD COLUMN last_seen_at TIMESTAMP;
+      END IF;
+    END $$;
+  `;
+
   // Create conversation_reads table (tracks when user last read each conversation)
   await sql`
     CREATE TABLE IF NOT EXISTS conversation_reads (
