@@ -2,7 +2,7 @@
 
 import type { Reaction, ReplyTo } from "~lib/api"
 
-import { escapeHtml, formatTime } from "../utils"
+import { escapeHtml, formatMessageContent, formatTime } from "../utils"
 
 // Message action icons
 export const MESSAGE_ACTION_ICONS = {
@@ -116,7 +116,7 @@ export function generateMessageHTML(
             ${MESSAGE_ACTION_ICONS.options}
           </button>
         </div>
-        <div class="github-chat-bubble">${quotedHTML}${escapeHtml(content)}</div>
+        <div class="github-chat-bubble">${quotedHTML}${formatMessageContent(content)}</div>
       </div>
       ${reactionsHTML}
       <div class="github-chat-meta">
