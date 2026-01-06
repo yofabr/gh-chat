@@ -6,7 +6,7 @@ import {
   getProfileDisplayName,
   getProfileUsername
 } from "../profile"
-import { getNavigationCallbacks } from "../state"
+import { getNavigationCallbacks, getPreferredViewMode } from "../state"
 
 // Handle chat button click
 export async function handleChatClick(): Promise<void> {
@@ -21,8 +21,16 @@ export async function handleChatClick(): Promise<void> {
   const avatar = getProfileAvatar()
 
   if (username) {
-    const nav = getNavigationCallbacks()
-    nav?.openChatDrawer(username, displayName, avatar)
+    // Check preferred view mode
+    const preferredMode = getPreferredViewMode()
+    if (preferredMode === "expanded") {
+      // Open expanded view - it will find/create the conversation
+      const { openExpandedViewWithUser } = await import("../expanded-view")
+      openExpandedViewWithUser(username, displayName, avatar)
+    } else {
+      const nav = getNavigationCallbacks()
+      nav?.openChatDrawer(username, displayName, avatar)
+    }
   }
 }
 

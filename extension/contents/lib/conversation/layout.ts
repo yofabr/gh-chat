@@ -27,6 +27,9 @@ export function generateConversationHeaderHTML(
       <button class="github-chat-minimize" id="github-chat-expanded-collapse" aria-label="Collapse to drawer" title="Collapse to drawer">
         ${ICONS.minimize}
       </button>
+      <button class="github-chat-expanded-close" id="github-chat-expanded-close" aria-label="Close" title="Close">
+        ${ICONS.close}
+      </button>
     `
     : `
       <button class="github-chat-expand" aria-label="Expand" title="Open expanded view">

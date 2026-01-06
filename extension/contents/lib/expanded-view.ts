@@ -6,13 +6,17 @@ import {
   type Conversation
 } from "~lib/api"
 
-import { renderConversationView } from "./conversation"
+import {
+  renderConversationView,
+  renderConversationViewInto
+} from "./conversation"
 import {
   clearEditingMessage,
   clearQuotedMessage,
   getNavigationCallbacks,
   setCurrentConversationId,
   setExpandedViewMode,
+  setPreferredViewMode,
   setWsCleanup,
   wsCleanup
 } from "./state"
@@ -41,8 +45,9 @@ export async function openExpandedView(
 ): Promise<void> {
   if (expandedViewEl) return // Already open
 
-  // Set expanded view mode
+  // Set expanded view mode and save preference
   setExpandedViewMode(true)
+  setPreferredViewMode("expanded")
 
   // Create the expanded view overlay
   expandedViewEl = document.createElement("div")
@@ -91,6 +96,40 @@ export async function openExpandedView(
   }
 }
 
+// Open expanded view with a specific user (from profile page)
+export async function openExpandedViewWithUser(
+  username: string,
+  displayName: string,
+  avatar: string
+): Promise<void> {
+  // First open the expanded view
+  await openExpandedView()
+
+  // Find the conversation with this user in the loaded list
+  const existingConv = conversationListData.find(
+    (c) => c.other_username.toLowerCase() === username.toLowerCase()
+  )
+
+  if (existingConv) {
+    // Select the existing conversation
+    await selectConversation(existingConv.id)
+  } else {
+    // No existing conversation - render conversation view directly for new chat
+    const mainPanel = document.getElementById("github-chat-expanded-main")
+    if (mainPanel) {
+      mainPanel.innerHTML = ""
+      await renderConversationViewInto(
+        mainPanel,
+        username,
+        displayName,
+        avatar,
+        undefined, // no existing conversation ID
+        true // isExpandedView
+      )
+    }
+  }
+}
+
 // Close expanded view (without reopening drawer)
 export function closeExpandedView(): void {
   if (!expandedViewEl) return
@@ -127,11 +166,12 @@ export async function collapseToDrawer(): Promise<void> {
     setWsCleanup(null)
   }
 
-  // Clear state
+  // Clear state and save drawer preference
   clearQuotedMessage()
   clearEditingMessage()
   setCurrentConversationId(null)
   setExpandedViewMode(false)
+  setPreferredViewMode("drawer")
   selectedConversationId = null
 
   // Remove from DOM
@@ -170,6 +210,16 @@ function setupExpandedViewListeners(): void {
     )
     if (collapseBtn) {
       collapseToDrawer()
+    }
+  })
+
+  // Close button in conversation header (using event delegation)
+  expandedViewEl.addEventListener("click", (e) => {
+    const closeBtn = (e.target as HTMLElement).closest(
+      "#github-chat-expanded-close"
+    )
+    if (closeBtn) {
+      closeExpandedView()
     }
   })
 
@@ -240,10 +290,16 @@ function renderConversationList(conversations: Conversation[]): void {
       const lastMessageTime = conv.last_message_time
         ? formatRelativeTime(new Date(conv.last_message_time).getTime())
         : ""
+      const notOnPlatformBadge = !conv.other_has_account
+        ? '<span class="github-chat-not-on-platform-badge" title="Not on GH Chat yet">!</span>'
+        : ""
 
       return `
         <div class="github-chat-expanded-list-item ${unreadClass} ${selectedClass}" data-conversation-id="${conv.id}">
-          <img src="${conv.other_avatar_url}" alt="${conv.other_username}" class="github-chat-expanded-avatar" />
+          <div class="github-chat-expanded-avatar-wrapper">
+            <img src="${conv.other_avatar_url}" alt="${conv.other_username}" class="github-chat-expanded-avatar" />
+            ${notOnPlatformBadge}
+          </div>
           <div class="github-chat-expanded-list-item-content">
             <div class="github-chat-expanded-list-item-header">
               <span class="github-chat-expanded-list-item-name">${escapeHtml(conv.other_display_name || conv.other_username)}</span>

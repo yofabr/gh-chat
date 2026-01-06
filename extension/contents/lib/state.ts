@@ -180,3 +180,26 @@ export function getEditingMessage(): EditingMessage {
 export function clearEditingMessage() {
   editingMessage = null
 }
+
+// Preferred view mode persistence (drawer vs expanded)
+const VIEW_MODE_KEY = "github-chat-preferred-view-mode"
+
+export type ViewMode = "drawer" | "expanded"
+
+export function getPreferredViewMode(): ViewMode {
+  try {
+    const stored = localStorage.getItem(VIEW_MODE_KEY)
+    if (stored === "expanded") return "expanded"
+  } catch {
+    // localStorage not available
+  }
+  return "drawer"
+}
+
+export function setPreferredViewMode(mode: ViewMode): void {
+  try {
+    localStorage.setItem(VIEW_MODE_KEY, mode)
+  } catch {
+    // localStorage not available
+  }
+}
