@@ -1833,16 +1833,16 @@
 
 /* New Chat Dialog */
 .github-chat-expanded-new-dialog {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
+  z-index: 10010;
 }
 
 .github-chat-expanded-new-dialog-content {
@@ -1850,19 +1850,63 @@
   border: 1px solid #30363d;
   border-radius: 12px;
   padding: 24px;
-  width: 280px;
+  width: 400px;
+  max-width: 90vw;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-.github-chat-expanded-new-dialog-content h3 {
-  margin: 0 0 16px 0;
+.github-chat-expanded-new-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.github-chat-expanded-new-dialog-header h3 {
+  margin: 0;
   font-size: 16px;
   font-weight: 600;
   color: #e6edf3;
 }
 
+.github-chat-expanded-new-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--fgColor-muted, #9198a1);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+  padding: 0;
+}
+
+.github-chat-expanded-new-close:hover {
+  background-color: rgba(110, 118, 129, 0.4);
+  color: var(--fgColor-default, #f0f6fc);
+}
+
+.github-chat-expanded-new-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.github-chat-expanded-new-search-icon {
+  position: absolute;
+  left: 12px;
+  color: #6e7681;
+  pointer-events: none;
+}
+
 .github-chat-expanded-new-dialog-content input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 10px 36px 10px 36px;
   background: #0d1117;
   border: 1px solid #30363d;
   border-radius: 6px;
@@ -1876,35 +1920,83 @@
   border-color: #1f6feb;
 }
 
-.github-chat-expanded-new-dialog-actions {
+.github-chat-expanded-new-loading {
+  position: absolute;
+  right: 12px;
   display: flex;
-  gap: 8px;
-  margin-top: 16px;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
 }
 
-.github-chat-expanded-new-cancel,
+.github-chat-expanded-new-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #30363d;
+  border-top-color: #1f6feb;
+  border-radius: 50%;
+  animation: github-chat-spin 0.8s linear infinite;
+}
+
+@keyframes github-chat-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.github-chat-expanded-new-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-top: 12px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+}
+
+.github-chat-expanded-new-preview-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.github-chat-expanded-new-preview-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.github-chat-expanded-new-preview-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6edf3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.github-chat-expanded-new-preview-username {
+  font-size: 12px;
+  color: #8b949e;
+}
+
 .github-chat-expanded-new-start {
-  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   border: none;
-}
-
-.github-chat-expanded-new-cancel {
-  background: #21262d;
-  color: #c9d1d9;
-}
-
-.github-chat-expanded-new-cancel:hover {
-  background: #30363d;
-}
-
-.github-chat-expanded-new-start {
   background: #238636;
   color: #fff;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
 }
 
 .github-chat-expanded-new-start:hover {
@@ -1916,8 +2008,23 @@
   cursor: not-allowed;
 }
 
+.github-chat-expanded-new-start svg {
+  flex-shrink: 0;
+}
+
 .github-chat-expanded-new-error {
   margin-top: 12px;
   font-size: 12px;
   color: #f85149;
+}
+
+.github-chat-expanded-new-error:empty {
+  display: none;
+}
+
+.github-chat-expanded-new-hint {
+  margin: 16px 0 0 0;
+  font-size: 12px;
+  color: #8b949e;
+  text-align: center;
 }

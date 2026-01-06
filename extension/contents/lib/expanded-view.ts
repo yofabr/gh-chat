@@ -412,40 +412,134 @@ function showNewChatDialog(): void {
   dialog.className = "github-chat-expanded-new-dialog"
   dialog.innerHTML = `
     <div class="github-chat-expanded-new-dialog-content">
-      <h3>Start a new conversation</h3>
-      <input type="text" placeholder="Enter GitHub username..." id="github-chat-new-username" />
-      <div class="github-chat-expanded-new-dialog-actions">
-        <button class="github-chat-expanded-new-cancel">Cancel</button>
-        <button class="github-chat-expanded-new-start">Start Chat</button>
+      <div class="github-chat-expanded-new-dialog-header">
+        <h3>New Conversation</h3>
+        <button class="github-chat-expanded-new-close" aria-label="Close">
+          <svg viewBox="0 0 16 16" width="16" height="16">
+            <path fill="currentColor" d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="github-chat-expanded-new-input-wrapper">
+        <svg viewBox="0 0 16 16" width="16" height="16" class="github-chat-expanded-new-search-icon">
+          <path fill="currentColor" d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"></path>
+        </svg>
+        <input type="text" placeholder="Search GitHub username..." id="github-chat-new-username" autocomplete="off" />
+        <div class="github-chat-expanded-new-loading" id="github-chat-new-loading" style="display: none;">
+          <div class="github-chat-expanded-new-spinner"></div>
+        </div>
+      </div>
+      <div class="github-chat-expanded-new-preview" id="github-chat-new-preview" style="display: none;">
+        <img src="" alt="" class="github-chat-expanded-new-preview-avatar" id="github-chat-new-preview-avatar" />
+        <div class="github-chat-expanded-new-preview-info">
+          <span class="github-chat-expanded-new-preview-name" id="github-chat-new-preview-name"></span>
+          <span class="github-chat-expanded-new-preview-username" id="github-chat-new-preview-username"></span>
+        </div>
+        <button class="github-chat-expanded-new-start" id="github-chat-new-start">
+          <svg viewBox="0 0 16 16" width="14" height="14">
+            <path fill="currentColor" d="M1.75 1h8.5c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 10.25 10H7.061l-2.574 2.573A1.458 1.458 0 0 1 2 11.543V10h-.25A1.75 1.75 0 0 1 0 8.25v-5.5C0 1.784.784 1 1.75 1ZM1.5 2.75v5.5c0 .138.112.25.25.25h1a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h3.5a.25.25 0 0 0 .25-.25v-5.5a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25Z"></path>
+          </svg>
+          Chat
+        </button>
       </div>
       <div class="github-chat-expanded-new-error" id="github-chat-new-error"></div>
+      <p class="github-chat-expanded-new-hint">Enter a GitHub username to start a conversation</p>
     </div>
   `
 
-  const sidebar = expandedViewEl?.querySelector(".github-chat-expanded-sidebar")
-  sidebar?.appendChild(dialog)
+  // Append to expanded view overlay for proper centering
+  expandedViewEl?.appendChild(dialog)
 
   const input = dialog.querySelector(
     "#github-chat-new-username"
   ) as HTMLInputElement
-  const cancelBtn = dialog.querySelector(".github-chat-expanded-new-cancel")
-  const startBtn = dialog.querySelector(".github-chat-expanded-new-start")
+  const closeBtn = dialog.querySelector(".github-chat-expanded-new-close")
+  const startBtn = dialog.querySelector("#github-chat-new-start")
   const errorEl = dialog.querySelector("#github-chat-new-error")
+  const loadingEl = dialog.querySelector("#github-chat-new-loading")
+  const previewEl = dialog.querySelector("#github-chat-new-preview")
+  const previewAvatar = dialog.querySelector(
+    "#github-chat-new-preview-avatar"
+  ) as HTMLImageElement
+  const previewName = dialog.querySelector("#github-chat-new-preview-name")
+  const previewUsername = dialog.querySelector(
+    "#github-chat-new-preview-username"
+  )
+  const hintEl = dialog.querySelector(".github-chat-expanded-new-hint")
 
   input?.focus()
 
-  cancelBtn?.addEventListener("click", () => dialog.remove())
+  closeBtn?.addEventListener("click", () => dialog.remove())
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) dialog.remove()
+  })
+
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null
+  let currentUser: {
+    login: string
+    name: string | null
+    avatar_url: string
+  } | null = null
+
+  // Search for user as they type
+  const searchUser = async (username: string) => {
+    if (!username) {
+      if (previewEl) (previewEl as HTMLElement).style.display = "none"
+      if (hintEl) (hintEl as HTMLElement).style.display = "block"
+      if (errorEl) errorEl.textContent = ""
+      currentUser = null
+      return
+    }
+
+    if (loadingEl) (loadingEl as HTMLElement).style.display = "flex"
+    if (errorEl) errorEl.textContent = ""
+    if (hintEl) (hintEl as HTMLElement).style.display = "none"
+
+    try {
+      const response = await fetch(`https://api.github.com/users/${username}`)
+      if (response.ok) {
+        const user = await response.json()
+        currentUser = {
+          login: user.login,
+          name: user.name,
+          avatar_url: user.avatar_url
+        }
+
+        if (previewAvatar) previewAvatar.src = user.avatar_url
+        if (previewName) previewName.textContent = user.name || user.login
+        if (previewUsername) previewUsername.textContent = `@${user.login}`
+        if (previewEl) (previewEl as HTMLElement).style.display = "flex"
+      } else if (response.status === 404) {
+        currentUser = null
+        if (previewEl) (previewEl as HTMLElement).style.display = "none"
+        if (errorEl) errorEl.textContent = "User not found on GitHub"
+      } else {
+        throw new Error("Failed to search")
+      }
+    } catch {
+      currentUser = null
+      if (previewEl) (previewEl as HTMLElement).style.display = "none"
+    } finally {
+      if (loadingEl) (loadingEl as HTMLElement).style.display = "none"
+    }
+  }
+
+  input?.addEventListener("input", () => {
+    if (searchTimeout) clearTimeout(searchTimeout)
+    searchTimeout = setTimeout(() => {
+      searchUser(input.value.trim())
+    }, 400)
+  })
 
   const startChat = async () => {
-    const username = input?.value.trim()
-    if (!username) return
+    if (!currentUser) return
 
     startBtn?.setAttribute("disabled", "true")
     if (errorEl) errorEl.textContent = ""
 
     try {
       const { getOrCreateConversation } = await import("~lib/api")
-      const result = await getOrCreateConversation(username)
+      const result = await getOrCreateConversation(currentUser.login)
 
       if (result.conversation) {
         dialog.remove()
@@ -468,7 +562,7 @@ function showNewChatDialog(): void {
 
   startBtn?.addEventListener("click", startChat)
   input?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") startChat()
+    if (e.key === "Enter" && currentUser) startChat()
     if (e.key === "Escape") dialog.remove()
   })
 }
