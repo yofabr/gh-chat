@@ -364,15 +364,15 @@ function renderConversationList(conversations: Conversation[]): void {
             ${notOnPlatformBadge}
           </div>
           <div class="github-chat-expanded-list-item-content">
-            <div class="github-chat-expanded-list-item-header">
-              <span class="github-chat-expanded-list-item-name">${escapeHtml(conv.other_display_name || conv.other_username)}</span>
-              <span class="github-chat-expanded-list-item-time">${lastMessageTime}</span>
-            </div>
+            <span class="github-chat-expanded-list-item-name">${escapeHtml(conv.other_display_name || conv.other_username)}</span>
             <div class="github-chat-expanded-list-item-preview">
               ${conv.last_message ? escapeHtml(conv.last_message.substring(0, 50)) + (conv.last_message.length > 50 ? "..." : "") : "No messages yet"}
             </div>
           </div>
-          ${conv.unread_count > 0 ? `<span class="github-chat-expanded-unread-badge">${conv.unread_count}</span>` : ""}
+          <div class="github-chat-expanded-list-item-meta">
+            <span class="github-chat-expanded-list-item-time">${lastMessageTime}</span>
+            ${conv.unread_count > 0 ? `<span class="github-chat-expanded-unread-badge">${conv.unread_count}</span>` : ""}
+          </div>
         </div>
       `
     })
@@ -670,15 +670,16 @@ export function updateConversationListItem(
   // Update unread badge if not the selected conversation
   if (incrementUnread && conversationId !== selectedConversationId) {
     item.classList.add("unread")
+    const metaEl = item.querySelector(".github-chat-expanded-list-item-meta")
     let badge = item.querySelector(".github-chat-expanded-unread-badge")
     if (badge) {
       const count = parseInt(badge.textContent || "0") + 1
       badge.textContent = String(count)
-    } else {
+    } else if (metaEl) {
       badge = document.createElement("span")
       badge.className = "github-chat-expanded-unread-badge"
       badge.textContent = "1"
-      item.appendChild(badge)
+      metaEl.appendChild(badge)
     }
   }
 
