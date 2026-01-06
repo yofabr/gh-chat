@@ -115,20 +115,18 @@ export function updateConversationInList(
       // Only show unread badge for messages from others
       if (!isOwnMessage) {
         // Increment unread count badge
-        const messageRow = listItem.querySelector(
-          ".github-chat-list-message-row"
-        )
+        const metaContainer = listItem.querySelector(".github-chat-list-meta")
         let badge = listItem.querySelector(".github-chat-list-unread-badge")
         if (badge) {
           const currentCount = parseInt(badge.textContent || "0") || 0
           const newCount = currentCount + 1
           badge.textContent = newCount > 99 ? "99+" : String(newCount)
-        } else if (messageRow) {
+        } else if (metaContainer) {
           // Create new badge
           badge = document.createElement("span")
           badge.className = "github-chat-list-unread-badge"
           badge.textContent = "1"
-          messageRow.appendChild(badge)
+          metaContainer.appendChild(badge)
         }
 
         // Add unread class
