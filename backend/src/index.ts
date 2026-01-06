@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { initDb } from "./db/index.js";
 import auth from "./routes/auth.js";
 import conversations from "./routes/conversations.js";
+import users from "./routes/users.js";
 import { createWebSocketServer } from "./websocket.js";
 import "dotenv/config";
 import type { Server } from "http";
@@ -45,6 +46,7 @@ app.use(
 // Routes
 app.route("/auth", auth);
 app.route("/conversations", conversations);
+app.route("/users", users);
 
 app.get("/", (c) => {
   return c.json({ message: "GH Chat API", version: "1.0.0" });
