@@ -30,7 +30,7 @@ export function scheduleMarkAsRead(
   pendingReadConversationId = conversationId
   pendingReadMessageIds = messageIds
 
-  // Wait 1.5 seconds before marking as read - gives user time to actually read
+  // Wait 0.45 seconds before marking as read
   pendingReadTimeout = setTimeout(() => {
     if (pendingReadConversationId === conversationId) {
       // Mark conversation as read
@@ -48,7 +48,7 @@ export function scheduleMarkAsRead(
     pendingReadTimeout = null
     pendingReadConversationId = null
     pendingReadMessageIds = []
-  }, 1500)
+  }, 450)
 }
 
 // Helper to clear unread count in chat list cache when opening a conversation
