@@ -458,8 +458,12 @@ function connectWebSocket(token: string): Promise<void> {
             "globalMessageCallback:",
             !!globalMessageCallback
           )
-          // Call the conversation-specific callback if set
-          if (messageCallback) {
+          // Call the conversation-specific callback if set AND message is for the current conversation
+          if (
+            messageCallback &&
+            data.conversationId &&
+            data.conversationId === currentConversationId
+          ) {
             messageCallback(data.message)
           }
           // Also call the global callback for list updates
