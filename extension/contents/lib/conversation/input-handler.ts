@@ -20,7 +20,7 @@ import {
   typingTimeout
 } from "../state"
 import { STATUS_ICONS } from "../types"
-import { escapeHtml, formatTime } from "../utils"
+import { escapeHtml, formatMessageContent, formatTime } from "../utils"
 import { showEmojiPickerForInsert } from "./emoji-picker"
 import { MESSAGE_ACTION_ICONS } from "./message-html"
 
@@ -272,7 +272,7 @@ async function handleSendMessage(
           ${MESSAGE_ACTION_ICONS.options}
         </button>
       </div>
-      <div class="github-chat-bubble">${quotedContentHtml}${escapeHtml(messageText)}</div>
+      <div class="github-chat-bubble">${quotedContentHtml}${formatMessageContent(messageText)}</div>
     </div>
     <div class="github-chat-meta">
       <span class="github-chat-time">${formatTime(Date.now())}</span>
@@ -356,7 +356,7 @@ async function handleEditMessage(
           ".github-chat-quoted-content"
         )
         const quotedHtml = quotedContent ? quotedContent.outerHTML : ""
-        bubbleEl.innerHTML = quotedHtml + escapeHtml(newContent)
+        bubbleEl.innerHTML = quotedHtml + formatMessageContent(newContent)
       }
 
       // Add/update edited indicator in meta
