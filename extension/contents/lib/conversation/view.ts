@@ -9,8 +9,10 @@ import {
 import { getCurrentUserInfo } from "../auth"
 import {
   chatDrawer,
+  clearDraftMessage,
   getCurrentUserId,
   getCurrentUsername,
+  getDraftMessage,
   messageCache,
   setCurrentConversationId,
   setCurrentOtherUser,
@@ -84,7 +86,12 @@ export async function renderConversationViewInto(
   // Initialize view state
   setCurrentView("conversation")
   setCurrentOtherUser({ username, displayName, avatar })
-  setGlobalMessageListener(null)
+
+  // Only clear global message listener in drawer mode
+  // In expanded view, we need it to update the sidebar
+  if (!isExpandedView) {
+    setGlobalMessageListener(null)
+  }
 
   // Render initial layout with cached messages if available
   const cached = existingConversationId
@@ -250,6 +257,19 @@ async function setupAllHandlers(
   if (sendBtn) sendBtn.disabled = false
   if (emojiBtn) emojiBtn.disabled = false
 
+  // Restore draft message if one exists
+  if (input) {
+    const draft = getDraftMessage(conversationId)
+    if (draft) {
+      input.value = draft
+      // Resize textarea to fit content
+      input.style.height = "auto"
+      input.style.height = Math.min(input.scrollHeight, 120) + "px"
+      // Clear the draft since we've restored it
+      clearDraftMessage(conversationId)
+    }
+  }
+
   setupInputHandlers(container, input, sendBtn)
   setupMessageActionHandlers(msgContainer)
   setupInfiniteScroll(
@@ -292,7 +312,12 @@ export async function renderConversationView(
     avatar: otherAvatar
   })
   setCurrentConversationId(conversationId)
-  setGlobalMessageListener(null)
+
+  // Only clear global message listener in drawer mode
+  // In expanded view, we need it to update the sidebar
+  if (!isExpandedView) {
+    setGlobalMessageListener(null)
+  }
 
   // Ensure current user info is set
   const userId = await ensureCurrentUserInfo()
