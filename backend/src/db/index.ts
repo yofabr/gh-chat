@@ -117,7 +117,95 @@ export async function initDb() {
         SELECT 1 FROM information_schema.columns 
         WHERE table_name = 'users' AND column_name = 'last_seen_at'
       ) THEN 
-        ALTER TABLE users ADD COLUMN last_seen_at TIMESTAMP;
+        ALTER TABLE users ADD COLUMN last_seen_at TIMESTAMPTZ;
+      END IF;
+    END $$;
+  `;
+
+  // Ensure last_seen_at is TIMESTAMPTZ (fix existing columns)
+  await sql`
+    DO $$ 
+    BEGIN 
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'users' 
+        AND column_name = 'last_seen_at' 
+        AND data_type = 'timestamp without time zone'
+      ) THEN 
+        ALTER TABLE users ALTER COLUMN last_seen_at TYPE TIMESTAMPTZ;
+      END IF;
+    END $$;
+  `;
+
+  // Migrate messages table timestamps to TIMESTAMPTZ
+  await sql`
+    DO $$ 
+    BEGIN 
+      -- messages.created_at
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'messages' 
+        AND column_name = 'created_at' 
+        AND data_type = 'timestamp without time zone'
+      ) THEN 
+        ALTER TABLE messages ALTER COLUMN created_at TYPE TIMESTAMPTZ;
+      END IF;
+      -- messages.read_at
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'messages' 
+        AND column_name = 'read_at' 
+        AND data_type = 'timestamp without time zone'
+      ) THEN 
+        ALTER TABLE messages ALTER COLUMN read_at TYPE TIMESTAMPTZ;
+      END IF;
+      -- messages.edited_at
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'messages' 
+        AND column_name = 'edited_at' 
+        AND data_type = 'timestamp without time zone'
+      ) THEN 
+        ALTER TABLE messages ALTER COLUMN edited_at TYPE TIMESTAMPTZ;
+      END IF;
+      -- messages.deleted_at
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'messages' 
+        AND column_name = 'deleted_at' 
+        AND data_type = 'timestamp without time zone'
+      ) THEN 
+        ALTER TABLE messages ALTER COLUMN deleted_at TYPE TIMESTAMPTZ;
+      END IF;
+    END $$;
+  `;
+
+  // Migrate sessions.expires_at to TIMESTAMPTZ (important for session validation)
+  await sql`
+    DO $$ 
+    BEGIN 
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'sessions' 
+        AND column_name = 'expires_at' 
+        AND data_type = 'timestamp without time zone'
+      ) THEN 
+        ALTER TABLE sessions ALTER COLUMN expires_at TYPE TIMESTAMPTZ;
+      END IF;
+    END $$;
+  `;
+
+  // Migrate conversation_reads.last_read_at to TIMESTAMPTZ (for unread indicators)
+  await sql`
+    DO $$ 
+    BEGIN 
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'conversation_reads' 
+        AND column_name = 'last_read_at' 
+        AND data_type = 'timestamp without time zone'
+      ) THEN 
+        ALTER TABLE conversation_reads ALTER COLUMN last_read_at TYPE TIMESTAMPTZ;
       END IF;
     END $$;
   `;
