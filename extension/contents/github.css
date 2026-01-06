@@ -1141,14 +1141,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-
-.github-chat-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 4px;
 }
 
 .github-chat-list-name {
@@ -1160,13 +1153,6 @@
   text-overflow: ellipsis;
 }
 
-.github-chat-list-time {
-  font-size: 12px;
-  color: var(--fgColor-muted, #9198a1);
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
 .github-chat-list-preview {
   font-size: 13px;
   color: var(--fgColor-muted, #9198a1);
@@ -1174,6 +1160,24 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Meta column for time and badge */
+.github-chat-list-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 12px;
+  min-width: 40px;
+}
+
+.github-chat-list-time {
+  font-size: 12px;
+  color: var(--fgColor-muted, #9198a1);
+  white-space: nowrap;
+  line-height: 1;
 }
 
 /* Unread message styling for list items */
@@ -1190,22 +1194,8 @@
   font-weight: 500;
 }
 
-/* Message row for preview and unread badge */
-.github-chat-list-message-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.github-chat-list-message-row .github-chat-list-preview {
-  flex: 1;
-  min-width: 0;
-}
-
 /* Unread badge in conversation list */
 .github-chat-list-unread-badge {
-  flex-shrink: 0;
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
@@ -1861,13 +1851,9 @@
 .github-chat-expanded-list-item-content {
   flex: 1;
   min-width: 0;
-}
-
-.github-chat-expanded-list-item-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .github-chat-expanded-list-item-name {
@@ -1883,12 +1869,6 @@
   color: #fff;
 }
 
-.github-chat-expanded-list-item-time {
-  font-size: 11px;
-  color: #6e7681;
-  flex-shrink: 0;
-}
-
 .github-chat-expanded-list-item-preview {
   font-size: 13px;
   color: #8b949e;
@@ -1901,11 +1881,25 @@
   color: #c9d1d9;
 }
 
+/* Meta column for time and badge in expanded list */
+.github-chat-expanded-list-item-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 12px;
+  min-width: 40px;
+}
+
+.github-chat-expanded-list-item-time {
+  font-size: 11px;
+  color: #6e7681;
+  white-space: nowrap;
+  line-height: 1;
+}
+
 .github-chat-expanded-unread-badge {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
   background: #238636;
   color: #fff;
   font-size: 11px;
