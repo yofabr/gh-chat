@@ -219,12 +219,54 @@
   background: var(--bgColor-muted, #161b22);
 }
 
+.github-chat-avatar-container {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .github-chat-avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
+}
+
+.github-chat-status-indicator {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bgColor-muted, #161b22);
+  background: var(--fgColor-muted, #9198a1);
+}
+
+.github-chat-status-indicator[data-status="online"] {
+  background: #3fb950;
+}
+
+.github-chat-status-indicator[data-status="offline"] {
+  background: var(--fgColor-muted, #9198a1);
+}
+
+.github-chat-status-indicator[data-status="unknown"] {
+  display: none;
+}
+
+.github-chat-user-status {
+  font-size: 11px;
+  color: var(--fgColor-muted, #9198a1);
+  margin-top: 1px;
+}
+
+.github-chat-user-status:empty {
+  display: none;
+}
+
+.github-chat-user-status.online {
+  color: #3fb950;
 }
 
 .github-chat-user-info {
