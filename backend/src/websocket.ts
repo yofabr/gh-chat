@@ -27,16 +27,13 @@ const localUserSockets = new Map<string, Set<AuthenticatedSocket>>();
 const typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
 // Get all users who have a conversation with this user (to notify about status changes)
-// Returns only partners who haven't hidden their online status
 async function getConversationPartners(userId: string): Promise<string[]> {
   try {
     const results = await sql`
       SELECT DISTINCT 
         CASE WHEN c.user1_id = ${userId}::uuid THEN c.user2_id ELSE c.user1_id END as partner_id
       FROM conversations c
-      JOIN users u ON u.id = CASE WHEN c.user1_id = ${userId}::uuid THEN c.user2_id ELSE c.user1_id END
-      WHERE (c.user1_id = ${userId}::uuid OR c.user2_id = ${userId}::uuid)
-        AND (u.hide_online_status IS NULL OR u.hide_online_status = FALSE)
+      WHERE c.user1_id = ${userId}::uuid OR c.user2_id = ${userId}::uuid
     `;
     return results.map((r) => r.partner_id);
   } catch {
