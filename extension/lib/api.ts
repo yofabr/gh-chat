@@ -143,6 +143,25 @@ export interface OtherUser {
   has_account: boolean
 }
 
+// User status interface
+export interface UserStatus {
+  userId: string
+  username: string
+  online: boolean
+  lastSeenAt: string | null
+}
+
+// Get user online status by user ID
+export async function getUserStatus(userId: string): Promise<UserStatus | null> {
+  try {
+    const response = await fetchWithAuth(`/users/${userId}/status`)
+    if (!response.ok) return null
+    return await response.json()
+  } catch {
+    return null
+  }
+}
+
 // Get all conversations for the current user
 export async function getConversations(): Promise<Conversation[]> {
   try {
@@ -403,6 +422,30 @@ let messageEditedCallback:
   | ((messageId: string, content: string, editedAt: string) => void)
   | null = null
 
+// User status callback (for online/offline events)
+let userStatusCallback:
+  | ((
+      userId: string,
+      username: string,
+      online: boolean,
+      lastSeenAt: string | null
+    ) => void)
+  | null = null
+
+// Set user status listener
+export function setUserStatusListener(
+  callback:
+    | ((
+        userId: string,
+        username: string,
+        online: boolean,
+        lastSeenAt: string | null
+      ) => void)
+    | null
+): void {
+  userStatusCallback = callback
+}
+
 // Global callback for any new message (used to update conversation list)
 let globalMessageCallback:
   | ((conversationId: string, message: Message) => void)
@@ -559,6 +602,20 @@ function connectWebSocket(token: string): Promise<void> {
           ) {
             messageEditedCallback(data.messageId, data.content, data.edited_at)
           }
+        }
+
+        // Handle user online/offline status events
+        if (data.type === "user_online" && userStatusCallback) {
+          userStatusCallback(data.userId, data.username, true, null)
+        }
+
+        if (data.type === "user_offline" && userStatusCallback) {
+          userStatusCallback(
+            data.userId,
+            data.username,
+            false,
+            data.lastSeenAt
+          )
         }
       } catch (e) {
         console.error("WebSocket message parse error:", e)
