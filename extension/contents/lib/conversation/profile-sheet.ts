@@ -252,7 +252,7 @@ function updateModalPinButton(): void {
     if (icon) {
       icon.innerHTML = `
         <path d="M12 17v5M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"/>
-        <path d="M3 3l18 18" stroke-linecap="round"/>
+        <line x1="5" y1="5" x2="19" y2="19" stroke-linecap="round" stroke-width="2.5"/>
       `
     }
     pinBtn.classList.add("github-chat-pinned")
