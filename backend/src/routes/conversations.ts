@@ -113,16 +113,14 @@ conversations.get("/", async (c) => {
           ELSE 'none'
         END
       ) as block_status,
-      (
-        SELECT pinned_at FROM pinned_conversations 
-        WHERE user_id = ${user.user_id} AND conversation_id = c.id
-      ) as pinned_at
+      pc.pinned_at
     FROM conversations c
     JOIN users u1 ON c.user1_id = u1.id
     JOIN users u2 ON c.user2_id = u2.id
+    LEFT JOIN pinned_conversations pc ON pc.user_id = ${user.user_id} AND pc.conversation_id = c.id
     WHERE c.user1_id = ${user.user_id} OR c.user2_id = ${user.user_id}
     ORDER BY 
-      pinned_at DESC NULLS LAST,
+      pc.pinned_at DESC NULLS LAST,
       c.updated_at DESC
   `;
 
