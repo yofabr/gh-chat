@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "../db/index.js";
 import { broadcastToConversation, broadcastToUser } from "../websocket.js";
+import { isBlocked } from "./users.js";
 
 interface AuthUser {
   user_id: string;
@@ -96,7 +97,22 @@ conversations.get("/", async (c) => {
            WHERE user_id = ${user.user_id} AND conversation_id = c.id),
           '1970-01-01'::timestamp
         )
-      ) as unread_count
+      ) as unread_count,
+      (
+        SELECT CASE 
+          WHEN EXISTS (
+            SELECT 1 FROM blocks 
+            WHERE blocker_id = ${user.user_id} 
+            AND blocked_id = CASE WHEN c.user1_id = ${user.user_id} THEN c.user2_id ELSE c.user1_id END
+          ) THEN 'blocked_by_me'
+          WHEN EXISTS (
+            SELECT 1 FROM blocks 
+            WHERE blocked_id = ${user.user_id} 
+            AND blocker_id = CASE WHEN c.user1_id = ${user.user_id} THEN c.user2_id ELSE c.user1_id END
+          ) THEN 'blocked_by_them'
+          ELSE 'none'
+        END
+      ) as block_status
     FROM conversations c
     JOIN users u1 ON c.user1_id = u1.id
     JOIN users u2 ON c.user2_id = u2.id
@@ -252,6 +268,13 @@ conversations.post("/with/:username", async (c) => {
     console.log(
       `[CONV] Target user resolved: ${targetUser.id} (${targetUser.username})`,
     );
+
+    // Check if either user has blocked the other
+    const blockStatus = await isBlocked(user.user_id, targetUser.id);
+    if (blockStatus.blocked) {
+      console.log(`[CONV] Block detected between users`);
+      return c.json({ error: "Cannot start conversation with this user" }, 403);
+    }
 
     // Ensure consistent ordering (alphabetically lower UUID first)
     const user1Id = user.user_id < targetUser.id ? user.user_id : targetUser.id;
@@ -474,6 +497,12 @@ conversations.post("/:id/messages", async (c) => {
     conversation.user1_id === user.user_id
       ? conversation.user2_id
       : conversation.user1_id;
+
+  // Check if either user has blocked the other
+  const blockStatus = await isBlocked(user.user_id, otherUserId);
+  if (blockStatus.blocked) {
+    return c.json({ error: "Cannot send message to this user" }, 403);
+  }
 
   // Insert message with optional reply_to_id
   const newMessages = await sql`

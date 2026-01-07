@@ -105,6 +105,7 @@ export interface Conversation {
   last_message: string | null
   last_message_time: string | null
   unread_count: number
+  block_status: "none" | "blocked_by_me" | "blocked_by_them"
 }
 
 export interface Reaction {
@@ -170,6 +171,58 @@ export async function getUserStatus(
   }
 }
 
+// ============= Block API =============
+
+export interface BlockStatus {
+  blocked: boolean
+  status: "none" | "blocked_by_me" | "blocked_by_them"
+}
+
+export interface BlockedUser {
+  id: string
+  username: string
+  display_name: string
+  avatar_url: string
+  blocked_at: string
+}
+
+// Block a user
+export async function blockUser(userId: string): Promise<boolean> {
+  try {
+    const response = await fetchWithAuth(`/users/${userId}/block`, {
+      method: "POST"
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+// Unblock a user
+export async function unblockUser(userId: string): Promise<boolean> {
+  try {
+    const response = await fetchWithAuth(`/users/${userId}/block`, {
+      method: "DELETE"
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+// Get block status between current user and another user
+export async function getBlockStatus(
+  userId: string
+): Promise<BlockStatus | null> {
+  try {
+    const response = await fetchWithAuth(`/users/${userId}/block-status`)
+    if (!response.ok) return null
+    return await response.json()
+  } catch {
+    return null
+  }
+}
+
 // Get current user's settings
 export async function getSettings(): Promise<UserSettings | null> {
   try {
@@ -194,6 +247,18 @@ export async function updateSettings(
     return await response.json()
   } catch {
     return null
+  }
+}
+
+// Get list of blocked users
+export async function getBlockedUsers(): Promise<BlockedUser[]> {
+  try {
+    const response = await fetchWithAuth("/users/blocked/list")
+    if (!response.ok) return []
+    const data = await response.json()
+    return data.blocked_users || []
+  } catch {
+    return []
   }
 }
 
@@ -481,6 +546,20 @@ export function setUserStatusListener(
   userStatusCallback = callback
 }
 
+// Block status callback (for real-time block/unblock events)
+let blockStatusCallback:
+  | ((blockedBy: string, status: "blocked_by_them" | "none") => void)
+  | null = null
+
+// Set block status listener
+export function setBlockStatusListener(
+  callback:
+    | ((blockedBy: string, status: "blocked_by_them" | "none") => void)
+    | null
+): void {
+  blockStatusCallback = callback
+}
+
 // Global callback for any new message (used to update conversation list)
 let globalMessageCallback:
   | ((conversationId: string, message: Message) => void)
@@ -646,6 +725,11 @@ function connectWebSocket(token: string): Promise<void> {
 
         if (data.type === "user_offline" && userStatusCallback) {
           userStatusCallback(data.userId, data.username, false, data.lastSeenAt)
+        }
+
+        // Handle block status change events
+        if (data.type === "block_status_changed" && blockStatusCallback) {
+          blockStatusCallback(data.blockedBy, data.status)
         }
       } catch (e) {
         console.error("WebSocket message parse error:", e)
