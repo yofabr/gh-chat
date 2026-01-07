@@ -282,7 +282,8 @@ export async function pinConversation(
       }
     )
     return response.ok
-  } catch {
+  } catch (error) {
+    console.error("pinConversation error:", error)
     return false
   }
 }
@@ -299,7 +300,8 @@ export async function unpinConversation(
       }
     )
     return response.ok
-  } catch {
+  } catch (error) {
+    console.error("unpinConversation error:", error)
     return false
   }
 }
