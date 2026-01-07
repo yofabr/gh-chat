@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "../db/index.js";
 import { getUserStatus } from "../redis.js";
+import { broadcastToUser } from "../websocket.js";
 
 interface AuthUser {
   user_id: string;
@@ -150,6 +151,13 @@ users.post("/:userId/block", async (c) => {
       ON CONFLICT (blocker_id, blocked_id) DO NOTHING
     `;
 
+    // Notify the blocked user in real-time
+    await broadcastToUser(targetUserId, {
+      type: "block_status_changed",
+      blockedBy: currentUser.user_id,
+      status: "blocked_by_them",
+    });
+
     return c.json({ success: true, blocked: true });
   } catch (error) {
     console.error("Error blocking user:", error);
@@ -168,6 +176,13 @@ users.delete("/:userId/block", async (c) => {
       WHERE blocker_id = ${currentUser.user_id}::uuid 
         AND blocked_id = ${targetUserId}::uuid
     `;
+
+    // Notify the unblocked user in real-time
+    await broadcastToUser(targetUserId, {
+      type: "block_status_changed",
+      blockedBy: currentUser.user_id,
+      status: "none",
+    });
 
     return c.json({ success: true, blocked: false });
   } catch (error) {
