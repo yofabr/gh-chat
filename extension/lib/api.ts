@@ -283,7 +283,7 @@ export async function pinConversation(
     )
     return response.ok
   } catch (error) {
-    console.error("pinConversation error:", error)
+    console.error("Failed to pin conversation:", conversationId, error)
     return false
   }
 }
@@ -301,7 +301,7 @@ export async function unpinConversation(
     )
     return response.ok
   } catch (error) {
-    console.error("unpinConversation error:", error)
+    console.error("Failed to unpin conversation:", conversationId, error)
     return false
   }
 }
