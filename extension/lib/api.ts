@@ -513,6 +513,20 @@ export function setUserStatusListener(
   userStatusCallback = callback
 }
 
+// Block status callback (for real-time block/unblock events)
+let blockStatusCallback:
+  | ((blockedBy: string, status: "blocked_by_them" | "none") => void)
+  | null = null
+
+// Set block status listener
+export function setBlockStatusListener(
+  callback:
+    | ((blockedBy: string, status: "blocked_by_them" | "none") => void)
+    | null
+): void {
+  blockStatusCallback = callback
+}
+
 // Global callback for any new message (used to update conversation list)
 let globalMessageCallback:
   | ((conversationId: string, message: Message) => void)
@@ -678,6 +692,11 @@ function connectWebSocket(token: string): Promise<void> {
 
         if (data.type === "user_offline" && userStatusCallback) {
           userStatusCallback(data.userId, data.username, false, data.lastSeenAt)
+        }
+
+        // Handle block status change events
+        if (data.type === "block_status_changed" && blockStatusCallback) {
+          blockStatusCallback(data.blockedBy, data.status)
         }
       } catch (e) {
         console.error("WebSocket message parse error:", e)
