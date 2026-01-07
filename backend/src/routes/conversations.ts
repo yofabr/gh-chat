@@ -112,12 +112,25 @@ conversations.get("/", async (c) => {
           ) THEN 'blocked_by_them'
           ELSE 'none'
         END
-      ) as block_status
+      ) as block_status,
+      (
+        SELECT EXISTS (
+          SELECT 1 FROM pinned_conversations 
+          WHERE user_id = ${user.user_id} AND conversation_id = c.id
+        )
+      ) as is_pinned,
+      (
+        SELECT pinned_at FROM pinned_conversations 
+        WHERE user_id = ${user.user_id} AND conversation_id = c.id
+      ) as pinned_at
     FROM conversations c
     JOIN users u1 ON c.user1_id = u1.id
     JOIN users u2 ON c.user2_id = u2.id
     WHERE c.user1_id = ${user.user_id} OR c.user2_id = ${user.user_id}
-    ORDER BY c.updated_at DESC
+    ORDER BY 
+      (SELECT EXISTS (SELECT 1 FROM pinned_conversations WHERE user_id = ${user.user_id} AND conversation_id = c.id)) DESC,
+      (SELECT pinned_at FROM pinned_conversations WHERE user_id = ${user.user_id} AND conversation_id = c.id) DESC NULLS LAST,
+      c.updated_at DESC
   `;
 
   return c.json({ conversations: results });
@@ -848,6 +861,84 @@ conversations.delete("/:id/messages/:messageId/reactions/:emoji", async (c) => {
   }
 
   return c.json({ success: true, emoji, messageId });
+});
+
+// Pin a conversation
+conversations.post("/:conversationId/pin", async (c) => {
+  const user = c.get("user");
+  const conversationId = c.req.param("conversationId");
+
+  // Verify conversation exists and user is a participant
+  const convCheck = await sql`
+    SELECT id FROM conversations 
+    WHERE id = ${conversationId}::uuid 
+    AND (user1_id = ${user.user_id} OR user2_id = ${user.user_id})
+  `;
+
+  if (convCheck.length === 0) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  // Insert or do nothing if already pinned
+  await sql`
+    INSERT INTO pinned_conversations (user_id, conversation_id)
+    VALUES (${user.user_id}, ${conversationId}::uuid)
+    ON CONFLICT (user_id, conversation_id) DO NOTHING
+  `;
+
+  return c.json({ success: true, pinned: true });
+});
+
+// Unpin a conversation
+conversations.delete("/:conversationId/pin", async (c) => {
+  const user = c.get("user");
+  const conversationId = c.req.param("conversationId");
+
+  // Verify conversation exists and user is a participant
+  const convCheck = await sql`
+    SELECT id FROM conversations 
+    WHERE id = ${conversationId}::uuid 
+    AND (user1_id = ${user.user_id} OR user2_id = ${user.user_id})
+  `;
+
+  if (convCheck.length === 0) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  // Delete the pin
+  await sql`
+    DELETE FROM pinned_conversations 
+    WHERE user_id = ${user.user_id} AND conversation_id = ${conversationId}::uuid
+  `;
+
+  return c.json({ success: true, pinned: false });
+});
+
+// Get pin status for a conversation
+conversations.get("/:conversationId/pin", async (c) => {
+  const user = c.get("user");
+  const conversationId = c.req.param("conversationId");
+
+  // Verify conversation exists and user is a participant
+  const convCheck = await sql`
+    SELECT id FROM conversations 
+    WHERE id = ${conversationId}::uuid 
+    AND (user1_id = ${user.user_id} OR user2_id = ${user.user_id})
+  `;
+
+  if (convCheck.length === 0) {
+    return c.json({ error: "Conversation not found" }, 404);
+  }
+
+  const pinned = await sql`
+    SELECT pinned_at FROM pinned_conversations 
+    WHERE user_id = ${user.user_id} AND conversation_id = ${conversationId}::uuid
+  `;
+
+  return c.json({
+    pinned: pinned.length > 0,
+    pinned_at: pinned.length > 0 ? pinned[0].pinned_at : null,
+  });
 });
 
 export default conversations;
