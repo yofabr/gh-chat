@@ -445,8 +445,8 @@ async function handlePin(): Promise<void> {
 async function handleUnpin(): Promise<void> {
   if (!currentConversationId) return
 
-  const success = await unpinConversation(currentConversationId)
-  if (success) {
+  const result = await unpinConversation(currentConversationId)
+  if (result.success) {
     currentPinStatus = false
     updateModalPinButton()
     // Invalidate drawer list cache to ensure it refreshes on next open
@@ -463,6 +463,8 @@ async function handleUnpin(): Promise<void> {
         )
       }
     }
+  } else if (result.error) {
+    showToast(result.error)
   }
 }
 
