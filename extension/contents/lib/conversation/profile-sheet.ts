@@ -146,6 +146,9 @@ function showProfileModal(container: HTMLElement): void {
   // Pin button handler
   const pinBtn = modal.querySelector("#github-chat-pin-btn") as HTMLElement
   pinBtn?.addEventListener("click", async () => {
+    // Prevent action while loading
+    if (isPinStatusLoading) return
+
     if (currentPinStatus) {
       await handleUnpin()
     } else {
@@ -394,6 +397,7 @@ async function handlePin(): Promise<void> {
   const success = await pinConversation(currentConversationId)
   if (success) {
     currentPinStatus = true
+    updateModalPinButton()
     // Refresh the conversation list to show the pinned chat at top
     if (isExpandedViewOpen()) {
       loadConversationList()
@@ -408,6 +412,7 @@ async function handleUnpin(): Promise<void> {
   const success = await unpinConversation(currentConversationId)
   if (success) {
     currentPinStatus = false
+    updateModalPinButton()
     // Refresh the conversation list to update the order
     if (isExpandedViewOpen()) {
       loadConversationList()
