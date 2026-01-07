@@ -25,17 +25,9 @@ export function generateConversationHeaderHTML(
 
   const rightButtons = isExpandedView
     ? `
-      <div class="github-chat-header-menu-container">
-        <button class="github-chat-menu-btn" id="github-chat-menu-btn" aria-label="Menu" title="Menu">
-          ${ICONS.menu}
-        </button>
-        <div class="github-chat-header-menu" id="github-chat-header-menu" style="display: none;">
-          <button class="github-chat-menu-item github-chat-menu-block" id="github-chat-menu-block">
-            <span class="github-chat-menu-icon">🚫</span>
-            <span class="github-chat-menu-label">Block user</span>
-          </button>
-        </div>
-      </div>
+      <button class="github-chat-menu-btn" id="github-chat-menu-btn" aria-label="Menu" title="Menu">
+        ${ICONS.menu}
+      </button>
       <button class="github-chat-minimize" id="github-chat-expanded-collapse" aria-label="Collapse to drawer" title="Collapse to drawer">
         ${ICONS.minimize}
       </button>
@@ -44,17 +36,9 @@ export function generateConversationHeaderHTML(
       </button>
     `
     : `
-      <div class="github-chat-header-menu-container">
-        <button class="github-chat-menu-btn" id="github-chat-menu-btn" aria-label="Menu" title="Menu">
-          ${ICONS.menu}
-        </button>
-        <div class="github-chat-header-menu" id="github-chat-header-menu" style="display: none;">
-          <button class="github-chat-menu-item github-chat-menu-block" id="github-chat-menu-block">
-            <span class="github-chat-menu-icon">🚫</span>
-            <span class="github-chat-menu-label">Block user</span>
-          </button>
-        </div>
-      </div>
+      <button class="github-chat-menu-btn" id="github-chat-menu-btn" aria-label="Menu" title="Menu">
+        ${ICONS.menu}
+      </button>
       <button class="github-chat-expand" aria-label="Expand" title="Open expanded view">
         ${ICONS.expand}
       </button>
