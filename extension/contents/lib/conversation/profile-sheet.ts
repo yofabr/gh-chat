@@ -1,17 +1,22 @@
-// Profile sheet modal with block/unblock functionality
+// Profile sheet modal with block/unblock and pin functionality
 
 import {
   blockUser,
   getBlockStatus,
+  getPinStatus,
+  pinConversation,
   setBlockStatusListener,
-  unblockUser
+  unblockUser,
+  unpinConversation
 } from "~lib/api"
 
 import { escapeHtml } from "../utils"
 
 // Current state
 let currentBlockedUserId: string | null = null
+let currentConversationId: string | null = null
 let currentBlockStatus: "none" | "blocked_by_me" | "blocked_by_them" = "none"
+let currentPinStatus: boolean = false
 let currentUserInfo: {
   avatar: string
   displayName: string
@@ -24,9 +29,11 @@ let currentContainer: HTMLElement | null = null
 export function setupProfileSheet(
   container: HTMLElement,
   otherUserId: string,
+  conversationId: string,
   userInfo?: { avatar: string; displayName: string; username: string }
 ): void {
   currentBlockedUserId = otherUserId
+  currentConversationId = conversationId
   currentUserInfo = userInfo || null
   currentContainer = container
 
@@ -52,8 +59,9 @@ export function setupProfileSheet(
     }
   })
 
-  // Fetch and display initial block status
+  // Fetch and display initial block and pin status
   fetchAndDisplayBlockStatus(container, otherUserId)
+  fetchAndDisplayPinStatus(conversationId)
 }
 
 // Create and show the profile modal
@@ -81,20 +89,7 @@ function showProfileModal(container: HTMLElement): void {
         <div class="github-chat-profile-username">@${escapeHtml(currentUserInfo?.username || "")}</div>
         
         <div class="github-chat-profile-actions">
-          <button class="github-chat-action-btn" data-action="search" disabled>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/>
-              <path d="M21 21l-4.35-4.35"/>
-            </svg>
-            <span>Search</span>
-          </button>
-          <button class="github-chat-action-btn" data-action="clear" disabled>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-            </svg>
-            <span>Clear</span>
-          </button>
-          <button class="github-chat-action-btn" data-action="pin" disabled>
+          <button class="github-chat-action-btn" data-action="pin" id="github-chat-pin-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 17v5M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"/>
             </svg>
@@ -134,8 +129,9 @@ function showProfileModal(container: HTMLElement): void {
   container.appendChild(modal)
   modalElement = modal
 
-  // Update block button state
+  // Update block and pin button states
   updateModalBlockButton()
+  updateModalPinButton()
 
   // Close handlers
   const overlay = modal.querySelector(".github-chat-profile-overlay")
@@ -143,6 +139,17 @@ function showProfileModal(container: HTMLElement): void {
 
   overlay?.addEventListener("click", () => closeModal())
   closeBtn?.addEventListener("click", () => closeModal())
+
+  // Pin button handler
+  const pinBtn = modal.querySelector("#github-chat-pin-btn") as HTMLElement
+  pinBtn?.addEventListener("click", async () => {
+    if (currentPinStatus) {
+      await handleUnpin()
+    } else {
+      await handlePin()
+    }
+    updateModalPinButton()
+  })
 
   // Block button handler - show confirmation or unblock directly
   const blockBtn = modal.querySelector(
@@ -226,6 +233,45 @@ function updateModalBlockButton(): void {
       </svg>
     `
     blockBtn.classList.remove("github-chat-menu-unblock")
+  }
+}
+
+// Update pin button in modal
+function updateModalPinButton(): void {
+  if (!modalElement) return
+
+  const pinBtn = modalElement.querySelector("#github-chat-pin-btn")
+  if (!pinBtn) return
+
+  const label = pinBtn.querySelector("span")
+  const icon = pinBtn.querySelector("svg")
+
+  if (currentPinStatus) {
+    if (label) label.textContent = "Unpin"
+    if (icon) {
+      icon.innerHTML = `
+        <path d="M12 17v5M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"/>
+        <path d="M3 3l18 18" stroke-linecap="round"/>
+      `
+    }
+    pinBtn.classList.add("github-chat-pinned")
+  } else {
+    if (label) label.textContent = "Pin"
+    if (icon) {
+      icon.innerHTML = `
+        <path d="M12 17v5M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"/>
+      `
+    }
+    pinBtn.classList.remove("github-chat-pinned")
+  }
+}
+
+// Fetch and display pin status
+async function fetchAndDisplayPinStatus(conversationId: string): Promise<void> {
+  const status = await getPinStatus(conversationId)
+  if (status) {
+    currentPinStatus = status.pinned
+    updateModalPinButton()
   }
 }
 
@@ -318,12 +364,34 @@ async function handleUnblock(container: HTMLElement): Promise<void> {
   }
 }
 
+// Handle pinning a conversation
+async function handlePin(): Promise<void> {
+  if (!currentConversationId) return
+
+  const success = await pinConversation(currentConversationId)
+  if (success) {
+    currentPinStatus = true
+  }
+}
+
+// Handle unpinning a conversation
+async function handleUnpin(): Promise<void> {
+  if (!currentConversationId) return
+
+  const success = await unpinConversation(currentConversationId)
+  if (success) {
+    currentPinStatus = false
+  }
+}
+
 // Cleanup
 export function cleanupProfileSheet(): void {
   closeModal()
   setBlockStatusListener(null)
   currentBlockedUserId = null
+  currentConversationId = null
   currentBlockStatus = "none"
+  currentPinStatus = false
   currentUserInfo = null
   currentContainer = null
 }
