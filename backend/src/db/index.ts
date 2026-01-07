@@ -261,8 +261,8 @@ export async function initDb() {
   await sql`
     CREATE TABLE IF NOT EXISTS blocks (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      blocker_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      blocked_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(blocker_id, blocked_id)
     )
