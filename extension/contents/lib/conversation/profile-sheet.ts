@@ -7,6 +7,8 @@ import {
   unblockUser
 } from "~lib/api"
 
+import { escapeHtml } from "../utils"
+
 // Current state
 let currentBlockedUserId: string | null = null
 let currentBlockStatus: "none" | "blocked_by_me" | "blocked_by_them" = "none"
@@ -73,10 +75,10 @@ function showProfileModal(container: HTMLElement): void {
       </div>
       <div class="github-chat-profile-content">
         <div class="github-chat-profile-avatar">
-          <img src="${currentUserInfo?.avatar || ""}" alt="${currentUserInfo?.displayName || "User"}" />
+          <img src="${escapeHtml(currentUserInfo?.avatar || "")}" alt="${escapeHtml(currentUserInfo?.displayName || "User")}" />
         </div>
-        <div class="github-chat-profile-name">${currentUserInfo?.displayName || "User"}</div>
-        <div class="github-chat-profile-username">@${currentUserInfo?.username || ""}</div>
+        <div class="github-chat-profile-name">${escapeHtml(currentUserInfo?.displayName || "User")}</div>
+        <div class="github-chat-profile-username">@${escapeHtml(currentUserInfo?.username || "")}</div>
         
         <div class="github-chat-profile-actions">
           <button class="github-chat-action-btn" data-action="search" disabled>
