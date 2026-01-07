@@ -2,7 +2,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { initDb } from "./db/index.js";
-import auth from "./routes/auth.js";
+import auth, { backfillUserEmails } from "./routes/auth.js";
 import conversations from "./routes/conversations.js";
 import users from "./routes/users.js";
 import { createWebSocketServer } from "./websocket.js";
@@ -62,6 +62,11 @@ async function main() {
   try {
     await initDb();
     console.log("Database initialized successfully");
+
+    // Backfill emails for existing users (idempotent, runs in background)
+    backfillUserEmails().catch((error) => {
+      console.error("Email backfill failed:", error);
+    });
   } catch (error) {
     console.error("Failed to initialize database:", error);
     process.exit(1);
