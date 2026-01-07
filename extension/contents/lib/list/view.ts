@@ -10,7 +10,7 @@ import {
   setCurrentView
 } from "../state"
 import type { ChatPreview } from "../types"
-import { escapeHtml, formatRelativeTime } from "../utils"
+import { escapeHtml, formatRelativeTime, PIN_INDICATOR_HTML } from "../utils"
 import { getAllChats } from "./data"
 import { startListMessageListener } from "./message-listener"
 
@@ -58,7 +58,7 @@ export function generateListViewInnerHTML(chats: ChatPreview[]): string {
                 <p class="github-chat-list-preview">${escapeHtml(chat.lastMessage)}</p>
               </div>
               <div class="github-chat-list-meta">
-                ${chat.isPinned ? '<span class="github-chat-pin-indicator" title="Pinned"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17v5M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"/></svg></span>' : ""}
+                ${chat.isPinned ? PIN_INDICATOR_HTML : ""}
                 <span class="github-chat-list-time">${formatRelativeTime(chat.lastMessageTime)}</span>
                 ${chat.unreadCount && chat.unreadCount > 0 ? `<span class="github-chat-list-unread-badge">${chat.unreadCount > 99 ? "99+" : chat.unreadCount}</span>` : ""}
               </div>
