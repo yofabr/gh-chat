@@ -669,6 +669,15 @@
   font-size: 12px;
 }
 
+/* Pin button active state */
+.github-chat-profile-actions .github-chat-action-btn.github-chat-pinned {
+  color: var(--fgColor-accent, #2f81f7);
+}
+
+.github-chat-profile-actions .github-chat-action-btn.github-chat-pinned:hover {
+  background: rgba(47, 129, 247, 0.1);
+}
+
 .github-chat-profile-menu {
   width: 100%;
 }
@@ -1546,6 +1555,19 @@
   font-weight: 500;
 }
 
+/* Pinned conversation indicator */
+.github-chat-pin-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fgColor-accent, #2f81f7);
+}
+
+.github-chat-pin-indicator svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* Unread badge in conversation list */
 .github-chat-list-unread-badge {
   min-width: 20px;
@@ -2264,6 +2286,19 @@
   border-radius: 10px;
   min-width: 18px;
   text-align: center;
+}
+
+/* Pin indicator in expanded list */
+.github-chat-expanded-list-item-meta .github-chat-pin-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fgColor-accent, #2f81f7);
+}
+
+.github-chat-expanded-list-item-meta .github-chat-pin-indicator svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* Main Panel */
