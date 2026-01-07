@@ -10,6 +10,7 @@ export interface ChatPreview {
   unreadCount?: number
   hasAccount: boolean
   conversationId?: string
+  isPinned?: boolean
 }
 
 export interface CurrentOtherUser {

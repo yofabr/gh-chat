@@ -106,6 +106,7 @@ export interface Conversation {
   last_message_time: string | null
   unread_count: number
   block_status: "none" | "blocked_by_me" | "blocked_by_them"
+  pinned_at: string | null
 }
 
 export interface Reaction {
@@ -259,6 +260,86 @@ export async function getBlockedUsers(): Promise<BlockedUser[]> {
     return data.blocked_users || []
   } catch {
     return []
+  }
+}
+
+// ============= Pin Conversation API =============
+
+export interface PinStatus {
+  pinned: boolean
+  pinned_at: string | null
+}
+
+export interface PinResult {
+  success: boolean
+  error?: string
+}
+
+// Pin a conversation
+export async function pinConversation(
+  conversationId: string
+): Promise<PinResult> {
+  try {
+    const response = await fetchWithAuth(
+      `/conversations/${conversationId}/pin`,
+      {
+        method: "POST"
+      }
+    )
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      return {
+        success: false,
+        error: data.error || "Failed to pin conversation"
+      }
+    }
+    return { success: true }
+  } catch (error) {
+    console.error("Failed to pin conversation:", conversationId, error)
+    return { success: false, error: "Failed to pin conversation" }
+  }
+}
+
+// Unpin a conversation
+export async function unpinConversation(
+  conversationId: string
+): Promise<PinResult> {
+  try {
+    const response = await fetchWithAuth(
+      `/conversations/${conversationId}/pin`,
+      {
+        method: "DELETE"
+      }
+    )
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      return {
+        success: false,
+        error: data.error || "Failed to unpin conversation"
+      }
+    }
+    return { success: true }
+  } catch (error) {
+    console.error("Failed to unpin conversation:", conversationId, error)
+    return { success: false, error: "Failed to unpin conversation" }
+  }
+}
+
+// Get pin status for a conversation
+export async function getPinStatus(
+  conversationId: string
+): Promise<PinStatus | null> {
+  try {
+    const response = await fetchWithAuth(`/conversations/${conversationId}/pin`)
+    if (!response.ok) return null
+    return await response.json()
+  } catch (error) {
+    console.error(
+      "Failed to get pin status for conversation:",
+      conversationId,
+      error
+    )
+    return null
   }
 }
 

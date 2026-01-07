@@ -635,38 +635,54 @@
   justify-content: center;
 }
 
-.github-chat-action-btn {
+.github-chat-profile-actions > .github-chat-action-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 12px;
+  padding: 16px 24px;
+  width: auto;
+  height: auto;
+  min-width: 80px;
   border: none;
-  background: transparent;
+  background: var(--bgColor-muted, #161b22);
   color: var(--fgColor-muted, #9198a1);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 12px;
   transition: all 0.15s ease;
-  min-width: 64px;
 }
 
-.github-chat-action-btn:hover:not(:disabled) {
-  background: var(--bgColor-muted, #161b22);
+.github-chat-profile-actions > .github-chat-action-btn:hover {
+  background: var(--bgColor-neutral-muted, #30363d);
   color: var(--fgColor-default, #f0f6fc);
 }
 
-.github-chat-action-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.github-chat-profile-actions > .github-chat-action-btn:active {
+  background: var(--bgColor-neutral-emphasis, #484f58);
 }
 
-.github-chat-action-btn svg {
-  width: 20px;
-  height: 20px;
+.github-chat-profile-actions > .github-chat-action-btn svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
 }
 
-.github-chat-action-btn span {
+.github-chat-profile-actions > .github-chat-action-btn span {
   font-size: 12px;
+  font-weight: 500;
+}
+
+/* Pin button active/pinned state */
+.github-chat-profile-actions > .github-chat-action-btn.github-chat-pinned {
+  color: var(--fgColor-accent, #2f81f7);
+  background: rgba(47, 129, 247, 0.15);
+}
+
+.github-chat-profile-actions
+  > .github-chat-action-btn.github-chat-pinned:hover {
+  background: rgba(47, 129, 247, 0.25);
+  color: var(--fgColor-accent, #2f81f7);
 }
 
 .github-chat-profile-menu {
@@ -1546,6 +1562,19 @@
   font-weight: 500;
 }
 
+/* Pinned conversation indicator */
+.github-chat-pin-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fgColor-accent, #2f81f7);
+}
+
+.github-chat-pin-indicator svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* Unread badge in conversation list */
 .github-chat-list-unread-badge {
   min-width: 20px;
@@ -2266,6 +2295,19 @@
   text-align: center;
 }
 
+/* Pin indicator in expanded list */
+.github-chat-expanded-list-item-meta .github-chat-pin-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fgColor-accent, #2f81f7);
+}
+
+.github-chat-expanded-list-item-meta .github-chat-pin-indicator svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* Main Panel */
 .github-chat-expanded-main {
   flex: 1;
@@ -2658,4 +2700,31 @@
 .github-chat-expanded-settings-status {
   font-size: 12px;
   color: #8b949e;
+}
+
+/* Toast notification */
+.github-chat-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #30363d;
+  color: #f0f6fc;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+    Helvetica, Arial, sans-serif;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 2147483647;
+  opacity: 0;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+  pointer-events: none;
+}
+
+.github-chat-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }

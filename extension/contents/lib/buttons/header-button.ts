@@ -3,6 +3,7 @@
 import { getTotalUnreadCount } from "~lib/api"
 
 import { checkAuth, openLogin } from "../auth"
+import { openExpandedView } from "../expanded-view"
 import { getNavigationCallbacks, getPreferredViewMode } from "../state"
 
 // Create header chat button
@@ -29,7 +30,6 @@ export function createHeaderChatButton(): HTMLButtonElement {
     // Check preferred view mode
     const preferredMode = getPreferredViewMode()
     if (preferredMode === "expanded") {
-      const { openExpandedView } = await import("../expanded-view")
       openExpandedView()
     } else {
       const nav = getNavigationCallbacks()
