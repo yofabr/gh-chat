@@ -216,6 +216,13 @@ export async function getBlockStatus(
 ): Promise<BlockStatus | null> {
   try {
     const response = await fetchWithAuth(`/users/${userId}/block-status`)
+    if (!response.ok) return null
+    return await response.json()
+  } catch {
+    return null
+  }
+}
+
 // Get current user's settings
 export async function getSettings(): Promise<UserSettings | null> {
   try {
