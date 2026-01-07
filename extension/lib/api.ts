@@ -303,7 +303,7 @@ export async function pinConversation(
 // Unpin a conversation
 export async function unpinConversation(
   conversationId: string
-): Promise<boolean> {
+): Promise<PinResult> {
   try {
     const response = await fetchWithAuth(
       `/conversations/${conversationId}/pin`,
@@ -311,10 +311,17 @@ export async function unpinConversation(
         method: "DELETE"
       }
     )
-    return response.ok
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      return {
+        success: false,
+        error: data.error || "Failed to unpin conversation"
+      }
+    }
+    return { success: true }
   } catch (error) {
     console.error("Failed to unpin conversation:", conversationId, error)
-    return false
+    return { success: false, error: "Failed to unpin conversation" }
   }
 }
 
