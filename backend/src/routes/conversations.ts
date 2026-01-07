@@ -856,6 +856,9 @@ conversations.delete("/:id/messages/:messageId/reactions/:emoji", async (c) => {
   return c.json({ success: true, emoji, messageId });
 });
 
+// Maximum number of pinned conversations per user
+const MAX_PINNED_CONVERSATIONS = 5;
+
 // Pin a conversation
 conversations.post("/:conversationId/pin", async (c) => {
   const user = c.get("user");
@@ -872,11 +875,35 @@ conversations.post("/:conversationId/pin", async (c) => {
     return c.json({ error: "Conversation not found" }, 404);
   }
 
-  // Insert or do nothing if already pinned
+  // Check if already pinned (don't count against limit)
+  const alreadyPinned = await sql`
+    SELECT 1 FROM pinned_conversations 
+    WHERE user_id = ${user.user_id} AND conversation_id = ${conversationId}::uuid
+  `;
+
+  if (alreadyPinned.length > 0) {
+    return c.json({ success: true, pinned: true });
+  }
+
+  // Check pin limit
+  const pinnedCount = await sql`
+    SELECT COUNT(*)::int as count FROM pinned_conversations 
+    WHERE user_id = ${user.user_id}
+  `;
+
+  if (pinnedCount[0].count >= MAX_PINNED_CONVERSATIONS) {
+    return c.json(
+      {
+        error: `You can only pin up to ${MAX_PINNED_CONVERSATIONS} conversations`,
+      },
+      400,
+    );
+  }
+
+  // Insert the pin
   await sql`
     INSERT INTO pinned_conversations (user_id, conversation_id)
     VALUES (${user.user_id}, ${conversationId}::uuid)
-    ON CONFLICT (user_id, conversation_id) DO NOTHING
   `;
 
   return c.json({ success: true, pinned: true });
