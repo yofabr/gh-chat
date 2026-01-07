@@ -324,8 +324,8 @@ function setupExpandedViewListeners(): void {
   document.addEventListener("keydown", handleEscape)
 }
 
-// Load conversation list
-async function loadConversationList(): Promise<void> {
+// Load conversation list (exported for external refresh)
+export async function loadConversationList(): Promise<void> {
   const listEl = expandedViewEl?.querySelector("#github-chat-expanded-list")
   if (!listEl) return
 
@@ -364,15 +364,19 @@ function renderConversationList(conversations: Conversation[]): void {
       const isSelected = conv.id === selectedConversationId
       const unreadClass = conv.unread_count > 0 ? "unread" : ""
       const selectedClass = isSelected ? "selected" : ""
+      const pinnedClass = conv.is_pinned ? "pinned" : ""
       const lastMessageTime = conv.last_message_time
         ? formatRelativeTime(new Date(conv.last_message_time).getTime())
         : ""
       const notOnPlatformBadge = !conv.other_has_account
         ? '<span class="github-chat-not-on-platform-badge" title="Not on GH Chat yet">!</span>'
         : ""
+      const pinIndicator = conv.is_pinned
+        ? '<span class="github-chat-pin-indicator" title="Pinned"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17v5M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"/></svg></span>'
+        : ""
 
       return `
-        <div class="github-chat-expanded-list-item ${unreadClass} ${selectedClass}" data-conversation-id="${conv.id}">
+        <div class="github-chat-expanded-list-item ${unreadClass} ${selectedClass} ${pinnedClass}" data-conversation-id="${conv.id}">
           <div class="github-chat-expanded-avatar-wrapper">
             <img src="${conv.other_avatar_url}" alt="${conv.other_username}" class="github-chat-expanded-avatar" />
             ${notOnPlatformBadge}
@@ -384,6 +388,7 @@ function renderConversationList(conversations: Conversation[]): void {
             </div>
           </div>
           <div class="github-chat-expanded-list-item-meta">
+            ${pinIndicator}
             <span class="github-chat-expanded-list-item-time">${lastMessageTime}</span>
             ${conv.unread_count > 0 ? `<span class="github-chat-expanded-unread-badge">${conv.unread_count}</span>` : ""}
           </div>
