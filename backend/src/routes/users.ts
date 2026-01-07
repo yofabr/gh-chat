@@ -182,8 +182,9 @@ export async function isBlocked(
       return { blocked: true, blockedBy: result[0].blocker_id };
     }
     return { blocked: false };
-  } catch {
-    return { blocked: false };
+  } catch (error) {
+    console.error("Error checking block status:", error);
+    throw error;
   }
 }
 
