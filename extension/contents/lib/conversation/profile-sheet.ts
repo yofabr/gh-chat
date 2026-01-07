@@ -391,12 +391,35 @@ async function handleUnblock(container: HTMLElement): Promise<void> {
   }
 }
 
+// Show a temporary toast message
+function showToast(message: string): void {
+  // Remove existing toast if any
+  const existingToast = document.querySelector(".github-chat-toast")
+  if (existingToast) existingToast.remove()
+
+  const toast = document.createElement("div")
+  toast.className = "github-chat-toast"
+  toast.textContent = message
+  document.body.appendChild(toast)
+
+  // Trigger animation
+  requestAnimationFrame(() => {
+    toast.classList.add("show")
+  })
+
+  // Remove after delay
+  setTimeout(() => {
+    toast.classList.remove("show")
+    setTimeout(() => toast.remove(), 300)
+  }, 3000)
+}
+
 // Handle pinning a conversation
 async function handlePin(): Promise<void> {
   if (!currentConversationId) return
 
-  const success = await pinConversation(currentConversationId)
-  if (success) {
+  const result = await pinConversation(currentConversationId)
+  if (result.success) {
     currentPinStatus = true
     updateModalPinButton()
     // Invalidate drawer list cache to ensure it refreshes on next open
@@ -413,6 +436,8 @@ async function handlePin(): Promise<void> {
         )
       }
     }
+  } else if (result.error) {
+    showToast(result.error)
   }
 }
 
