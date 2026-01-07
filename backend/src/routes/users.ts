@@ -297,6 +297,9 @@ users.get("/:userId/block-status", async (c) => {
   } catch (error) {
     console.error("Error checking block status:", error);
     return c.json({ error: "Failed to check block status" }, 500);
+  }
+});
+
 // Get current user's settings
 users.get("/settings", async (c) => {
   const currentUser = c.get("user");
