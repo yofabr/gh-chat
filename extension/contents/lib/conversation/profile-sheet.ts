@@ -374,7 +374,13 @@ async function handlePin(): Promise<void> {
     currentPinStatus = true
     // Refresh the conversation list to show the pinned chat at top
     if (isExpandedViewOpen()) {
-      loadConversationList()
+      try {
+        await loadConversationList()
+      } catch (error) {
+        console.error("Failed to refresh conversation list after pinning:", error)
+        // Revert local state if refresh failed to keep UI consistent with server
+        currentPinStatus = false
+      }
     }
   }
 }
@@ -388,7 +394,13 @@ async function handleUnpin(): Promise<void> {
     currentPinStatus = false
     // Refresh the conversation list to update the order
     if (isExpandedViewOpen()) {
-      loadConversationList()
+      try {
+        await loadConversationList()
+      } catch (error) {
+        console.error("Failed to refresh conversation list after unpinning:", error)
+        // Revert local state if refresh failed to keep UI consistent with server
+        currentPinStatus = true
+      }
     }
   }
 }
