@@ -77,7 +77,7 @@ function LandingPage() {
 
 
         <div className="mt-16 flex flex-wrap justify-center gap-6 max-w-5xl">
-          <div className="text-center">
+          <div className="text-center w-full sm:w-1/2 md:w-1/3 lg:w-1/4">
             <div className="w-12 h-12 bg-[#161b22] border border-[#3d444d] rounded-lg flex items-center justify-center mx-auto mb-3">
               <svg
                 className="w-6 h-6 text-[#238636]"
@@ -99,7 +99,7 @@ function LandingPage() {
             </p>
           </div>
 
-          <div className="text-center">
+          <div className="text-center w-full sm:w-1/2 md:w-1/3 lg:w-1/4">
             <div className="w-12 h-12 bg-[#161b22] border border-[#3d444d] rounded-lg flex items-center justify-center mx-auto mb-3">
               <svg
                 className="w-5 h-5 text-[#238636]"
